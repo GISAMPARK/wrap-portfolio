@@ -5,7 +5,7 @@ import plotly.express as px
 st.set_page_config(layout="wide", page_title="랩어카운트 대시보드")
 
 # 💡 기삼님의 시트 아이디! (절대 건드리지 마세요!)
-SHEET_ID = "1KQGu9NH2iKmBTYDMTEHxxlPnTlFOEoTyB9fN6cf-gek"
+SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
 
 # 🛡️ 고객 보호를 위한 '이름 자동 마스킹' 함수
 def mask_name(name):
@@ -126,3 +126,4 @@ try:
 except Exception as e:
     st.error("데이터를 불러오거나 계산하는 중 오류가 발생했습니다.")
     st.write("🔧 상세 에러:", e)
+
