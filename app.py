@@ -5,12 +5,18 @@ import plotly.express as px
 st.set_page_config(layout="wide", page_title="랩어카운트 대시보드")
 
 # 👇 여기에 아까 복사해둔 구글 시트 아이디를 따옴표 안에 붙여넣으세요! 👇
-SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
-# 데이터 불러오기 (1분마다 새로고침)
+SHEET_ID = "여기에_아이디를_붙여넣으세요"
+
 @st.cache_data(ttl=60)
 def load_data():
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
     df = pd.read_csv(url)
+    
+    # 💡 강력한 방어막: 시트에 쉼표(,)나 '원', '%' 기호가 섞여 있어도 컴퓨터가 알아서 숫자로 바꿔줍니다!
+    cols_to_clean = ['초기투자금', '추가투자금', '총투자금', '평가자산', '수익률(%)']
+    for col in cols_to_clean:
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.replace(',', '').str.replace('원', '').str.replace('%', '').astype(float)
     return df
 
 st.title("📈 랩어카운트 수익 관리 대시보드")
@@ -37,17 +43,32 @@ try:
             fig_year = px.bar(yearly_avg, x='가입연도', y='평균 수익률(%)', text='평균 수익률(%)', 
                               color='가입연도', title="가입 연도에 따른 현재 평균 수익률")
             fig_year.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
-            fig_year.update_layout(yaxis=dict(range=[yearly_avg['평균 수익률(%)'].min() * 1.2, yearly_avg['평균 수익률(%)'].max() * 1.3]))
+            
+            # Y축 범위 자동 조절
+            y_max = yearly_avg['평균 수익률(%)'].max()
+            y_min = yearly_avg['평균 수익률(%)'].min()
+            fig_year.update_layout(yaxis=dict(range=[y_min * 1.2 if y_min < 0 else 0, y_max * 1.3]))
             st.plotly_chart(fig_year, use_container_width=True)
         
         # --- 나머지 탭: 개별 고객 그래프 ---
         for i, client in enumerate(client_list):
             with tabs[i+1]:
                 client_df = df[df["고객명"] == client].sort_values(by="날짜")
+                latest_data = client_df.iloc[-1]
                 
-                if "투자시작일" in client_df.columns and not client_df.empty:
-                    c_start = client_df["투자시작일"].iloc[0]
-                    st.info(f"👤 **{client}** 고객님 | 📅 투자 시작일: **{c_start}**")
+                c_start = latest_data.get("투자시작일", "정보없음")
+                st.info(f"👤 **{client}** 고객님 | 📅 투자 시작일: **{c_start}**")
+                
+                # ⭐ V2.0 하이라이트: 기삼님이 추가하신 항목들을 상단에 멋진 요약 박스로 보여줍니다!
+                col1, col2, col3, col4 = st.columns(4)
+                if "초기투자금" in df.columns:
+                    col1.metric("초기투자금", f"{latest_data['초기투자금']:,.0f}원")
+                if "추가투자금" in df.columns:
+                    col2.metric("추가투자금", f"{latest_data['추가투자금']:,.0f}원")
+                if "총투자금" in df.columns:
+                    col3.metric("총투자금", f"{latest_data['총투자금']:,.0f}원")
+                if "평가자산" in df.columns:
+                    col4.metric("현재 평가자산", f"{latest_data['평가자산']:,.0f}원", f"{latest_data['수익률(%)']}%")
                 
                 fig = px.line(client_df, x="날짜", y="수익률(%)", markers=True, 
                               title=f"{client} 고객님 누적 수익률 추이")
@@ -55,7 +76,7 @@ try:
                 st.plotly_chart(fig, use_container_width=True)
                 
                 # 1000만원 투자 시뮬레이션
-                latest_return = client_df.iloc[-1]["수익률(%)"]
+                latest_return = latest_data["수익률(%)"]
                 simul_amount = 10000000 * (1 + (latest_return / 100))
                 
                 st.markdown("---")
