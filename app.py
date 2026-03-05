@@ -4,24 +4,34 @@ import plotly.express as px
 
 st.set_page_config(layout="wide", page_title="랩어카운트 대시보드")
 
-# 💡 기삼님의 시트 아이디를 미리 입력해 두었습니다! 건드릴 필요 없습니다!
-SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
+# 💡 기삼님의 시트 아이디! (절대 건드리지 마세요!)
+SHEET_ID = "1KQGu9NH2iKmBTYDMTEHxxlPnTlFOEoTyB9fN6cf-gek"
+
+# 🛡️ 고객 보호를 위한 '이름 자동 마스킹' 함수
+def mask_name(name):
+    name = str(name).strip()
+    if len(name) <= 1:
+        return name
+    elif len(name) == 2:
+        return name[0] + "*"
+    else:
+        return name[0] + "*" * (len(name) - 2) + name[-1]
 
 @st.cache_data(ttl=60)
 def load_data():
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
     df = pd.read_csv(url)
     
-    # 빈 줄(이름이 없는 줄)이 섞여 들어오면 에러가 나지 않게 무시하고 삭제합니다.
+    # 빈 줄 무시 & 이름 마스킹 처리
     if '고객명' in df.columns:
         df = df.dropna(subset=['고객명'])
         df = df[df['고객명'].str.strip() != '']
+        df['고객명'] = df['고객명'].apply(mask_name)  # 여기서 임혜진 -> 임*진 으로 바뀝니다!
     
-    # 🛡️ 초강력 방어막: '₩', '원', ',', '%' 등 숫자와 소수점, 마이너스(-) 빼고 다 지워버립니다!
+    # ₩ 기호나 쉼표가 있어도 숫자로 완벽 변환
     cols_to_clean = ['초기투자금', '추가투자금', '총투자금', '평가자산', '수익률(%)']
     for col in cols_to_clean:
         if col in df.columns:
-            # 정규식을 써서 순수 숫자만 남깁니다.
             df[col] = df[col].astype(str).str.replace(r'[^\d.-]', '', regex=True)
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             
@@ -56,6 +66,24 @@ try:
             y_min = yearly_avg['평균 수익률(%)'].min()
             fig_year.update_layout(yaxis=dict(range=[y_min * 1.2 if y_min < 0 else 0, y_max * 1.3]))
             st.plotly_chart(fig_year, use_container_width=True)
+            
+            # ⭐ 추가하신 기능: 가입연도별 1000만원 투자 시뮬레이션
+            st.markdown("---")
+            st.subheader("💡 가입 연도별 1,000만 원 투자 시뮬레이션")
+            
+            # 연도별로 예쁜 요약 박스들을 나란히 띄웁니다
+            cols = st.columns(len(yearly_avg))
+            for idx, row in yearly_avg.iterrows():
+                year = row['가입연도']
+                avg_return = row['평균 수익률(%)']
+                simul_amount = 10000000 * (1 + (avg_return / 100))
+                
+                with cols[idx]:
+                    st.markdown(f"**{year} 가입자 평균**")
+                    if avg_return >= 0:
+                        st.success(f"평균 {avg_return}% 📈\n\n**{simul_amount:,.0f}원**")
+                    else:
+                        st.warning(f"평균 {avg_return}% 📉\n\n**{simul_amount:,.0f}원**")
         
         # --- 나머지 탭: 개별 고객 그래프 ---
         for i, client in enumerate(client_list):
@@ -82,7 +110,7 @@ try:
                 fig.update_traces(line=dict(width=3), marker=dict(size=8))
                 st.plotly_chart(fig, use_container_width=True)
                 
-                # 시뮬레이션
+                # 개별 고객 시뮬레이션
                 latest_return = latest_data["수익률(%)"]
                 simul_amount = 10000000 * (1 + (latest_return / 100))
                 
@@ -96,6 +124,5 @@ try:
         st.info("구글 스프레드시트에 아직 입력된 데이터가 없습니다.")
 
 except Exception as e:
-    st.error("데이터를 불러오거나 계산하는 중 오류가 발생했습니다. (자세한 에러 원인은 아래에 표시됩니다)")
+    st.error("데이터를 불러오거나 계산하는 중 오류가 발생했습니다.")
     st.write("🔧 상세 에러:", e)
-
