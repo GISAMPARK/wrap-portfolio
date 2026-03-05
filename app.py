@@ -4,19 +4,27 @@ import plotly.express as px
 
 st.set_page_config(layout="wide", page_title="랩어카운트 대시보드")
 
-# 👇 여기에 아까 복사해둔 구글 시트 아이디를 따옴표 안에 붙여넣으세요! 👇
-SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
+# 💡 기삼님의 시트 아이디를 미리 입력해 두었습니다! 건드릴 필요 없습니다!
+SHEET_ID = "1KQGu9NH2iKmBTYDMTEHxxlPnTlFOEoTyB9fN6cf-gek"
 
 @st.cache_data(ttl=60)
 def load_data():
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
     df = pd.read_csv(url)
     
-    # 💡 강력한 방어막: 시트에 쉼표(,)나 '원', '%' 기호가 섞여 있어도 컴퓨터가 알아서 숫자로 바꿔줍니다!
+    # 빈 줄(이름이 없는 줄)이 섞여 들어오면 에러가 나지 않게 무시하고 삭제합니다.
+    if '고객명' in df.columns:
+        df = df.dropna(subset=['고객명'])
+        df = df[df['고객명'].str.strip() != '']
+    
+    # 🛡️ 초강력 방어막: '₩', '원', ',', '%' 등 숫자와 소수점, 마이너스(-) 빼고 다 지워버립니다!
     cols_to_clean = ['초기투자금', '추가투자금', '총투자금', '평가자산', '수익률(%)']
     for col in cols_to_clean:
         if col in df.columns:
-            df[col] = df[col].astype(str).str.replace(',', '').str.replace('원', '').str.replace('%', '').astype(float)
+            # 정규식을 써서 순수 숫자만 남깁니다.
+            df[col] = df[col].astype(str).str.replace(r'[^\d.-]', '', regex=True)
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            
     return df
 
 st.title("📈 랩어카운트 수익 관리 대시보드")
@@ -44,7 +52,6 @@ try:
                               color='가입연도', title="가입 연도에 따른 현재 평균 수익률")
             fig_year.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
             
-            # Y축 범위 자동 조절
             y_max = yearly_avg['평균 수익률(%)'].max()
             y_min = yearly_avg['평균 수익률(%)'].min()
             fig_year.update_layout(yaxis=dict(range=[y_min * 1.2 if y_min < 0 else 0, y_max * 1.3]))
@@ -59,7 +66,7 @@ try:
                 c_start = latest_data.get("투자시작일", "정보없음")
                 st.info(f"👤 **{client}** 고객님 | 📅 투자 시작일: **{c_start}**")
                 
-                # ⭐ V2.0 하이라이트: 기삼님이 추가하신 항목들을 상단에 멋진 요약 박스로 보여줍니다!
+                # 상단 요약 박스
                 col1, col2, col3, col4 = st.columns(4)
                 if "초기투자금" in df.columns:
                     col1.metric("초기투자금", f"{latest_data['초기투자금']:,.0f}원")
@@ -75,7 +82,7 @@ try:
                 fig.update_traces(line=dict(width=3), marker=dict(size=8))
                 st.plotly_chart(fig, use_container_width=True)
                 
-                # 1000만원 투자 시뮬레이션
+                # 시뮬레이션
                 latest_return = latest_data["수익률(%)"]
                 simul_amount = 10000000 * (1 + (latest_return / 100))
                 
@@ -89,5 +96,5 @@ try:
         st.info("구글 스프레드시트에 아직 입력된 데이터가 없습니다.")
 
 except Exception as e:
-    st.error("구글 스프레드시트 연결을 확인해주세요. (시트 아이디가 맞는지, 공유 설정이 '모든 사용자'로 되어있는지 확인)")
-
+    st.error("데이터를 불러오거나 계산하는 중 오류가 발생했습니다. (자세한 에러 원인은 아래에 표시됩니다)")
+    st.write("🔧 상세 에러:", e)
