@@ -5,7 +5,7 @@ import plotly.express as px
 st.set_page_config(layout="wide", page_title="랩어카운트 대시보드")
 
 # 💡 기삼님의 시트 아이디
-SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
+SHEET_ID = "1KQGu9NH2iKmBTYDMTEHxxlPnTlFOEoTyB9fN6cf-gek"
 
 def mask_name(name):
     name = str(name).strip()
@@ -21,7 +21,6 @@ def load_data():
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
     df = pd.read_csv(url)
     
-    # ⭐ 띄어쓰기 방어막: 시트 제목에 띄어쓰기가 있어도 알아서 지우고 읽습니다!
     df.columns = df.columns.str.strip()
     
     if '고객명' in df.columns:
@@ -29,13 +28,13 @@ def load_data():
         df = df[df['고객명'].str.strip() != '']
         df['고객명'] = df['고객명'].apply(mask_name)
         
-    # '계좌명' 칸이 없으면 기본랩 처리
     if '계좌명' not in df.columns:
         df['계좌명'] = '기본랩'
     else:
         df['계좌명'] = df['계좌명'].fillna('기본랩')
     
-    cols_to_clean = ['초기투자금', '추가투자금', '총투자금', '평가자산', '수익률(%)']
+    # ⭐ '정산수익금' 칸도 숫자로 깔끔하게 변환하도록 추가했습니다!
+    cols_to_clean = ['초기투자금', '추가투자금', '정산수익금', '총투자금', '평가자산', '수익률(%)']
     for col in cols_to_clean:
         if col in df.columns:
             df[col] = df[col].astype(str).str.replace(r'[^\d.-]', '', regex=True)
@@ -55,36 +54,31 @@ try:
         tabs = st.tabs(["🏆 랩 종류별 연도 평균"] + list(client_list))
         
         # ==========================================
-        # 1️⃣ 첫 번째 탭: 랩 종류별로 그래프를 위아래로 나눕니다!
+        # 1️⃣ 첫 번째 탭: 랩 종류별 상하단 분리 (기존과 동일)
         # ==========================================
         with tabs[0]:
             st.header("🏆 가입 연도 및 랩 종류별 고객 평균 수익률")
             
             latest_df = df.sort_values('날짜').groupby(['고객명', '계좌명']).tail(1).copy()
-            # 0205 오타 방어용 (앞뒤 공백 제거 후 4자리 추출)
             latest_df['가입연도'] = latest_df['투자시작일'].astype(str).str.strip().str[:4] + "년"
             
             yearly_avg = latest_df.groupby(['가입연도', '계좌명'])['수익률(%)'].mean().reset_index()
             yearly_avg.rename(columns={'수익률(%)': '평균 수익률(%)'}, inplace=True)
             yearly_avg['평균 수익률(%)'] = yearly_avg['평균 수익률(%)'].round(2)
             
-            # 보유한 계좌(랩) 종류 목록을 가져옵니다 (예: 미국랩, 국내랩)
             account_types = yearly_avg['계좌명'].unique()
             
-            # 계좌 종류별로 위아래로 하나씩 그려줍니다.
             for acc in account_types:
                 st.markdown(f"### 📊 [{acc}] 가입 연도별 평균 수익률")
-                
                 acc_data = yearly_avg[yearly_avg['계좌명'] == acc]
                 
                 fig_year = px.bar(acc_data, x='가입연도', y='평균 수익률(%)', text='평균 수익률(%)')
-                
                 fig_year.update_traces(
                     texttemplate='<b>%{text:.2f}%</b>', 
                     textposition='outside',
                     textfont=dict(size=22, color='black'),
                     width=0.4,
-                    marker_color='#1f77b4' # 파란색 통일
+                    marker_color='#1f77b4'
                 )
                 
                 y_max = acc_data['평균 수익률(%)'].max()
@@ -92,7 +86,6 @@ try:
                 fig_year.update_layout(yaxis=dict(range=[min(0, y_min * 1.2), y_max * 1.4]))
                 st.plotly_chart(fig_year, use_container_width=True)
                 
-                # 시뮬레이션 박스 표시
                 st.markdown(f"**💡 [{acc}] 1,000만 원 투자 시뮬레이션**")
                 cols = st.columns(len(acc_data))
                 for idx, (_, row) in enumerate(acc_data.iterrows()):
@@ -106,11 +99,10 @@ try:
                         else:
                             st.warning(f"**{year} 가입자**\n\n평균 {avg_return}% 📉\n\n**{simul_amount:,.0f}원**")
                 
-                # 랩 종류가 바뀔 때마다 예쁜 절취선 추가
                 st.markdown("<br><hr style='border: 2px dashed #bbb;'><br>", unsafe_allow_html=True)
         
         # ==========================================
-        # 2️⃣ 개별 고객 탭 (기존과 동일하게 상하단 분리)
+        # 2️⃣ 개별 고객 탭: 정산수익금 기능 탑재!
         # ==========================================
         for i, client in enumerate(client_list):
             with tabs[i+1]:
@@ -126,19 +118,40 @@ try:
                     acc_df = client_df[client_df['계좌명'] == account]
                     latest_data = acc_df.iloc[-1]
                     
-                    col1, col2, col3, col4 = st.columns(4)
+                    # ⭐ 5칸으로 늘어난 상단 요약 박스!
+                    cols = st.columns(5)
                     if "초기투자금" in acc_df.columns:
-                        col1.metric("초기투자금", f"{latest_data['초기투자금']:,.0f}원")
+                        cols[0].metric("초기투자금", f"{latest_data['초기투자금']:,.0f}원")
                     if "추가투자금" in acc_df.columns:
-                        col2.metric("추가투자금", f"{latest_data['추가투자금']:,.0f}원")
+                        cols[1].metric("추가투자금", f"{latest_data['추가투자금']:,.0f}원")
+                    if "정산수익금" in acc_df.columns:
+                        total_settlement = acc_df['정산수익금'].sum()
+                        cols[2].metric("총 정산수익금", f"{total_settlement:,.0f}원")
                     if "총투자금" in acc_df.columns:
-                        col3.metric("총투자금", f"{latest_data['총투자금']:,.0f}원")
+                        cols[3].metric("총투자금", f"{latest_data['총투자금']:,.0f}원")
                     if "평가자산" in acc_df.columns:
-                        col4.metric("현재 평가자산", f"{latest_data['평가자산']:,.0f}원", f"{latest_data['수익률(%)']}%")
+                        cols[4].metric("현재 평가자산", f"{latest_data['평가자산']:,.0f}원", f"{latest_data['수익률(%)']}%")
                     
+                    # 라인 그래프 그리기
                     fig = px.line(acc_df, x="날짜", y="수익률(%)", markers=True, 
                                   title=f"{client} 고객님의 [{account}] 누적 수익률 추이")
                     fig.update_traces(line=dict(width=3), marker=dict(size=8))
+                    
+                    # ⭐ 핵심 마법: 정산이 발생한 날짜에 크고 빨간 별표(⭐)와 글씨를 달아줍니다!
+                    if "정산수익금" in acc_df.columns:
+                        settlements = acc_df[acc_df["정산수익금"] != 0] # 0이 아닌(정산된) 날짜 추출
+                        if not settlements.empty:
+                            fig.add_scatter(
+                                x=settlements["날짜"], 
+                                y=settlements["수익률(%)"],
+                                mode="markers+text",
+                                marker=dict(color="red", size=16, symbol="star"),
+                                text=["<b>💰정산</b>"] * len(settlements),
+                                textposition="top center",
+                                textfont=dict(color="red", size=16),
+                                name="정산 발생 시점"
+                            )
+                            
                     st.plotly_chart(fig, use_container_width=True)
                     
                     latest_return = latest_data["수익률(%)"]
