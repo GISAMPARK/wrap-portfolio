@@ -4,7 +4,7 @@ import plotly.express as px
 
 st.set_page_config(layout="wide", page_title="랩어카운트 대시보드")
 
-# 💡 기삼님의 시트 아이디! (절대 건드리지 마세요!)
+# 💡 기삼님의 시트 아이디
 SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
 
 # 🛡️ 고객 보호를 위한 '이름 자동 마스킹' 함수
@@ -22,13 +22,11 @@ def load_data():
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
     df = pd.read_csv(url)
     
-    # 빈 줄 무시 & 이름 마스킹 처리
     if '고객명' in df.columns:
         df = df.dropna(subset=['고객명'])
         df = df[df['고객명'].str.strip() != '']
-        df['고객명'] = df['고객명'].apply(mask_name)  # 여기서 임혜진 -> 임*진 으로 바뀝니다!
+        df['고객명'] = df['고객명'].apply(mask_name)
     
-    # ₩ 기호나 쉼표가 있어도 숫자로 완벽 변환
     cols_to_clean = ['초기투자금', '추가투자금', '총투자금', '평가자산', '수익률(%)']
     for col in cols_to_clean:
         if col in df.columns:
@@ -60,27 +58,36 @@ try:
             
             fig_year = px.bar(yearly_avg, x='가입연도', y='평균 수익률(%)', text='평균 수익률(%)', 
                               color='가입연도', title="가입 연도에 따른 현재 평균 수익률")
-            fig_year.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+            
+            # ⭐ 수정 요청사항: 막대를 얇게(width=0.4), 글씨를 크고 진하게!
+            fig_year.update_traces(
+                texttemplate='<b>%{text:.2f}%</b>', 
+                textposition='outside',
+                textfont=dict(size=22, color='black'),
+                width=0.4
+            )
             
             y_max = yearly_avg['평균 수익률(%)'].max()
             y_min = yearly_avg['평균 수익률(%)'].min()
-            fig_year.update_layout(yaxis=dict(range=[y_min * 1.2 if y_min < 0 else 0, y_max * 1.3]))
+            # 글씨가 잘리지 않게 위쪽 공간을 넉넉히 확보합니다.
+            fig_year.update_layout(yaxis=dict(range=[min(0, y_min * 1.2), y_max * 1.4]))
             st.plotly_chart(fig_year, use_container_width=True)
             
-            # ⭐ 추가하신 기능: 가입연도별 1000만원 투자 시뮬레이션
+            # ⭐ 수정 요청사항: 기삼님 시트 로직에 맞춘 1000만 원 시뮬레이션
             st.markdown("---")
             st.subheader("💡 가입 연도별 1,000만 원 투자 시뮬레이션")
             
-            # 연도별로 예쁜 요약 박스들을 나란히 띄웁니다
             cols = st.columns(len(yearly_avg))
             for idx, row in yearly_avg.iterrows():
                 year = row['가입연도']
                 avg_return = row['평균 수익률(%)']
-                simul_amount = 10000000 * (1 + (avg_return / 100))
+                
+                # 원금에 퍼센트를 그대로 곱합니다. (예: 1000만 * 99.44% = 994만4천원)
+                simul_amount = 10000000 * (avg_return / 100)
                 
                 with cols[idx]:
                     st.markdown(f"**{year} 가입자 평균**")
-                    if avg_return >= 0:
+                    if avg_return >= 100:
                         st.success(f"평균 {avg_return}% 📈\n\n**{simul_amount:,.0f}원**")
                     else:
                         st.warning(f"평균 {avg_return}% 📉\n\n**{simul_amount:,.0f}원**")
@@ -94,7 +101,6 @@ try:
                 c_start = latest_data.get("투자시작일", "정보없음")
                 st.info(f"👤 **{client}** 고객님 | 📅 투자 시작일: **{c_start}**")
                 
-                # 상단 요약 박스
                 col1, col2, col3, col4 = st.columns(4)
                 if "초기투자금" in df.columns:
                     col1.metric("초기투자금", f"{latest_data['초기투자금']:,.0f}원")
@@ -110,20 +116,19 @@ try:
                 fig.update_traces(line=dict(width=3), marker=dict(size=8))
                 st.plotly_chart(fig, use_container_width=True)
                 
-                # 개별 고객 시뮬레이션
+                # ⭐ 개별 고객 시뮬레이션 수정
                 latest_return = latest_data["수익률(%)"]
-                simul_amount = 10000000 * (1 + (latest_return / 100))
+                simul_amount = 10000000 * (latest_return / 100)
                 
                 st.markdown("---")
                 st.subheader("💡 1,000만 원 투자 시뮬레이션")
-                if latest_return >= 0:
-                    st.success(f"현재 누적 수익률 **{latest_return}%**를 기준으로, 처음에 **1,000만 원**을 투자하셨다면 현재 **{simul_amount:,.0f}원**이 되어있습니다. 📈")
+                if latest_return >= 100:
+                    st.success(f"현재 수익률 **{latest_return}%**를 기준으로, 처음에 **1,000만 원**을 투자하셨다면 현재 **{simul_amount:,.0f}원**이 되어있습니다. 📈")
                 else:
-                    st.warning(f"현재 누적 수익률 **{latest_return}%**를 기준으로, 처음에 **1,000만 원**을 투자하셨다면 현재 **{simul_amount:,.0f}원**입니다. 장기적인 관점에서 회복을 기대할 수 있습니다. 📉")
+                    st.warning(f"현재 수익률 **{latest_return}%**를 기준으로, 처음에 **1,000만 원**을 투자하셨다면 현재 **{simul_amount:,.0f}원**입니다. 장기적인 관점에서 회복을 기대할 수 있습니다. 📉")
     else:
         st.info("구글 스프레드시트에 아직 입력된 데이터가 없습니다.")
 
 except Exception as e:
     st.error("데이터를 불러오거나 계산하는 중 오류가 발생했습니다.")
     st.write("🔧 상세 에러:", e)
-
