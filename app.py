@@ -5,7 +5,7 @@ import plotly.express as px
 st.set_page_config(layout="wide", page_title="랩어카운트 대시보드")
 
 # 👇 여기에 아까 복사해둔 구글 시트 아이디를 따옴표 안에 붙여넣으세요! 👇
-SHEET_ID = "여기에_아이디를_붙여넣으세요"
+SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
 
 @st.cache_data(ttl=60)
 def load_data():
@@ -90,3 +90,4 @@ try:
 
 except Exception as e:
     st.error("구글 스프레드시트 연결을 확인해주세요. (시트 아이디가 맞는지, 공유 설정이 '모든 사용자'로 되어있는지 확인)")
+
