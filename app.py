@@ -5,7 +5,7 @@ import plotly.express as px
 st.set_page_config(layout="wide", page_title="랩어카운트 대시보드")
 
 # 💡 기삼님의 시트 아이디를 미리 입력해 두었습니다! 건드릴 필요 없습니다!
-SHEET_ID = "1KQGu9NH2iKmBTYDMTEHxxlPnTlFOEoTyB9fN6cf-gek"
+SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
 
 @st.cache_data(ttl=60)
 def load_data():
@@ -98,3 +98,4 @@ try:
 except Exception as e:
     st.error("데이터를 불러오거나 계산하는 중 오류가 발생했습니다. (자세한 에러 원인은 아래에 표시됩니다)")
     st.write("🔧 상세 에러:", e)
+
