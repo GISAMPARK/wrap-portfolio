@@ -21,6 +21,8 @@ def load_data():
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
     df = pd.read_csv(url)
     
+    # ⭐ 초강력 진공청소기: '총 투자금', '총투자금' 등 1행 제목의 띄어쓰기를 모조리 삭제해서 에러 원천 차단!
+    df.columns = df.columns.str.replace(' ', '')
     df.columns = df.columns.str.strip()
     
     if '고객명' in df.columns:
@@ -33,8 +35,8 @@ def load_data():
     else:
         df['계좌명'] = df['계좌명'].fillna('기본랩')
     
-    # ⭐ 새로운 칸(투자원금, 원금대비 수익률) 완벽 추가!
-    cols_to_clean = ['초기투자금', '추가투자금', '정산수익금', '투자원금', '총투자금', '평가자산', '원금대비 수익률(%)', '수익률(%)']
+    # ⭐ 띄어쓰기를 뺀 정확한 기둥 이름들 ('누적수익금' 추가 완료!)
+    cols_to_clean = ['초기투자금', '추가투자금', '정산수익금', '누적수익금', '투자원금', '총투자금', '평가자산', '원금대비수익률(%)', '수익률(%)']
     for col in cols_to_clean:
         if col in df.columns:
             df[col] = df[col].astype(str).str.replace(r'[^\d.-]', '', regex=True)
@@ -79,7 +81,7 @@ try:
                         textposition='outside',
                         textfont=dict(size=22, color='black'),
                         width=0.4,
-                        marker_color='#636EFA' # 고급스러운 보라빛 파란색
+                        marker_color='#636EFA'
                     )
                     
                     y_max = acc_data['평균 수익률(%)'].max()
@@ -103,7 +105,7 @@ try:
                     st.markdown("<br><hr style='border: 2px dashed #bbb;'><br>", unsafe_allow_html=True)
         
         # ==========================================
-        # 2️⃣ 개별 고객 탭: 두 가지 그래프 분리!
+        # 2️⃣ 개별 고객 탭: 두 가지 그래프 분리 & 누적수익금 적용!
         # ==========================================
         for i, client in enumerate(client_list):
             with tabs[i+1]:
@@ -119,15 +121,14 @@ try:
                     acc_df = client_df[client_df['계좌명'] == account]
                     latest_data = acc_df.iloc[-1]
                     
-                    # ⭐ 6칸으로 확장된 요약 박스 (투자원금 추가)
+                    # ⭐ 기삼님의 완벽한 아이디어 반영: '누적수익금'을 요약 박스에 표시!
                     cols = st.columns(6)
                     if "초기투자금" in acc_df.columns:
                         cols[0].metric("초기투자금", f"{latest_data['초기투자금']:,.0f}원")
                     if "추가투자금" in acc_df.columns:
                         cols[1].metric("추가투자금", f"{latest_data['추가투자금']:,.0f}원")
-                    if "정산수익금" in acc_df.columns:
-                        total_settlement = acc_df['정산수익금'].sum()
-                        cols[2].metric("총 정산수익금", f"{total_settlement:,.0f}원")
+                    if "누적수익금" in acc_df.columns:
+                        cols[2].metric("총 누적수익금", f"{latest_data['누적수익금']:,.0f}원")
                     if "투자원금" in acc_df.columns:
                         cols[3].metric("투자원금", f"{latest_data['투자원금']:,.0f}원")
                     if "총투자금" in acc_df.columns:
@@ -137,29 +138,30 @@ try:
                     
                     st.markdown("<br>", unsafe_allow_html=True)
                     
-                    # --- 📈 그래프 1: 원금대비 수익률 (눈에 확 띄는 주황색) ---
-                    if "원금대비 수익률(%)" in acc_df.columns:
-                        fig1 = px.line(acc_df, x="날짜", y="원금대비 수익률(%)", markers=True, 
+                    # --- 📈 그래프 1: 원금대비 수익률 (주황색) ---
+                    if "원금대비수익률(%)" in acc_df.columns:
+                        fig1 = px.line(acc_df, x="날짜", y="원금대비수익률(%)", markers=True, 
                                       title=f"🟠 {client} 고객님의 [{account}] 원금대비 수익률 추이",
-                                      color_discrete_sequence=['#FF7F0E']) # 주황색
+                                      color_discrete_sequence=['#FF7F0E'])
                         fig1.update_traces(line=dict(width=3), marker=dict(size=8))
                         
+                        # 오직 '정산수익금'에 숫자가 적힌 그 날짜에만 별표가 찍힙니다!
                         if "정산수익금" in acc_df.columns:
                             settlements = acc_df[acc_df["정산수익금"] != 0]
                             if not settlements.empty:
                                 fig1.add_scatter(
-                                    x=settlements["날짜"], y=settlements["원금대비 수익률(%)"],
+                                    x=settlements["날짜"], y=settlements["원금대비수익률(%)"],
                                     mode="markers+text", marker=dict(color="red", size=16, symbol="star"),
                                     text=["<b>💰정산</b>"] * len(settlements), textposition="top center",
                                     textfont=dict(color="red", size=16), name="정산 발생 시점"
                                 )
                         st.plotly_chart(fig1, use_container_width=True)
                         
-                    # --- 📈 그래프 2: 총 수익률 (차분하고 신뢰감 있는 파란색) ---
+                    # --- 📈 그래프 2: 총 수익률 (파란색) ---
                     if "수익률(%)" in acc_df.columns:
                         fig2 = px.line(acc_df, x="날짜", y="수익률(%)", markers=True, 
                                       title=f"🔵 {client} 고객님의 [{account}] 총 수익률 추이",
-                                      color_discrete_sequence=['#1F77B4']) # 파란색
+                                      color_discrete_sequence=['#1F77B4'])
                         fig2.update_traces(line=dict(width=3), marker=dict(size=8))
                         
                         if "정산수익금" in acc_df.columns:
