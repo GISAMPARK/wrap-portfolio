@@ -4,7 +4,7 @@ import plotly.express as px
 
 st.set_page_config(layout="wide", page_title="랩어카운트 대시보드")
 
-# 💡 기삼님의 시트 아이디
+# 💡 기삼님의 시트 아이디 (고정)
 SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
 
 def mask_name(name):
@@ -33,8 +33,8 @@ def load_data():
     else:
         df['계좌명'] = df['계좌명'].fillna('기본랩')
     
-    # ⭐ '정산수익금' 칸도 숫자로 깔끔하게 변환하도록 추가했습니다!
-    cols_to_clean = ['초기투자금', '추가투자금', '정산수익금', '총투자금', '평가자산', '수익률(%)']
+    # ⭐ 새로운 칸(투자원금, 원금대비 수익률) 완벽 추가!
+    cols_to_clean = ['초기투자금', '추가투자금', '정산수익금', '투자원금', '총투자금', '평가자산', '원금대비 수익률(%)', '수익률(%)']
     for col in cols_to_clean:
         if col in df.columns:
             df[col] = df[col].astype(str).str.replace(r'[^\d.-]', '', regex=True)
@@ -54,55 +54,56 @@ try:
         tabs = st.tabs(["🏆 랩 종류별 연도 평균"] + list(client_list))
         
         # ==========================================
-        # 1️⃣ 첫 번째 탭: 랩 종류별 상하단 분리 (기존과 동일)
+        # 1️⃣ 첫 번째 탭: 랩 종류별 상하단 분리
         # ==========================================
         with tabs[0]:
-            st.header("🏆 가입 연도 및 랩 종류별 고객 평균 수익률")
+            st.header("🏆 가입 연도 및 랩 종류별 고객 평균 총 수익률")
             
             latest_df = df.sort_values('날짜').groupby(['고객명', '계좌명']).tail(1).copy()
             latest_df['가입연도'] = latest_df['투자시작일'].astype(str).str.strip().str[:4] + "년"
             
-            yearly_avg = latest_df.groupby(['가입연도', '계좌명'])['수익률(%)'].mean().reset_index()
-            yearly_avg.rename(columns={'수익률(%)': '평균 수익률(%)'}, inplace=True)
-            yearly_avg['평균 수익률(%)'] = yearly_avg['평균 수익률(%)'].round(2)
-            
-            account_types = yearly_avg['계좌명'].unique()
-            
-            for acc in account_types:
-                st.markdown(f"### 📊 [{acc}] 가입 연도별 평균 수익률")
-                acc_data = yearly_avg[yearly_avg['계좌명'] == acc]
+            if '수익률(%)' in latest_df.columns:
+                yearly_avg = latest_df.groupby(['가입연도', '계좌명'])['수익률(%)'].mean().reset_index()
+                yearly_avg.rename(columns={'수익률(%)': '평균 수익률(%)'}, inplace=True)
+                yearly_avg['평균 수익률(%)'] = yearly_avg['평균 수익률(%)'].round(2)
                 
-                fig_year = px.bar(acc_data, x='가입연도', y='평균 수익률(%)', text='평균 수익률(%)')
-                fig_year.update_traces(
-                    texttemplate='<b>%{text:.2f}%</b>', 
-                    textposition='outside',
-                    textfont=dict(size=22, color='black'),
-                    width=0.4,
-                    marker_color='#1f77b4'
-                )
+                account_types = yearly_avg['계좌명'].unique()
                 
-                y_max = acc_data['평균 수익률(%)'].max()
-                y_min = acc_data['평균 수익률(%)'].min()
-                fig_year.update_layout(yaxis=dict(range=[min(0, y_min * 1.2), y_max * 1.4]))
-                st.plotly_chart(fig_year, use_container_width=True)
-                
-                st.markdown(f"**💡 [{acc}] 1,000만 원 투자 시뮬레이션**")
-                cols = st.columns(len(acc_data))
-                for idx, (_, row) in enumerate(acc_data.iterrows()):
-                    year = row['가입연도']
-                    avg_return = row['평균 수익률(%)']
-                    simul_amount = 10000000 * (avg_return / 100)
+                for acc in account_types:
+                    st.markdown(f"### 📊 [{acc}] 가입 연도별 평균 총 수익률")
+                    acc_data = yearly_avg[yearly_avg['계좌명'] == acc]
                     
-                    with cols[idx]:
-                        if avg_return >= 100:
-                            st.success(f"**{year} 가입자**\n\n평균 {avg_return}% 📈\n\n**{simul_amount:,.0f}원**")
-                        else:
-                            st.warning(f"**{year} 가입자**\n\n평균 {avg_return}% 📉\n\n**{simul_amount:,.0f}원**")
-                
-                st.markdown("<br><hr style='border: 2px dashed #bbb;'><br>", unsafe_allow_html=True)
+                    fig_year = px.bar(acc_data, x='가입연도', y='평균 수익률(%)', text='평균 수익률(%)')
+                    fig_year.update_traces(
+                        texttemplate='<b>%{text:.2f}%</b>', 
+                        textposition='outside',
+                        textfont=dict(size=22, color='black'),
+                        width=0.4,
+                        marker_color='#636EFA' # 고급스러운 보라빛 파란색
+                    )
+                    
+                    y_max = acc_data['평균 수익률(%)'].max()
+                    y_min = acc_data['평균 수익률(%)'].min()
+                    fig_year.update_layout(yaxis=dict(range=[min(0, y_min * 1.2), y_max * 1.4]))
+                    st.plotly_chart(fig_year, use_container_width=True)
+                    
+                    st.markdown(f"**💡 [{acc}] 1,000만 원 투자 시뮬레이션 (총 수익률 기준)**")
+                    cols = st.columns(len(acc_data))
+                    for idx, (_, row) in enumerate(acc_data.iterrows()):
+                        year = row['가입연도']
+                        avg_return = row['평균 수익률(%)']
+                        simul_amount = 10000000 * (avg_return / 100)
+                        
+                        with cols[idx]:
+                            if avg_return >= 100:
+                                st.success(f"**{year} 가입자**\n\n평균 {avg_return}% 📈\n\n**{simul_amount:,.0f}원**")
+                            else:
+                                st.warning(f"**{year} 가입자**\n\n평균 {avg_return}% 📉\n\n**{simul_amount:,.0f}원**")
+                    
+                    st.markdown("<br><hr style='border: 2px dashed #bbb;'><br>", unsafe_allow_html=True)
         
         # ==========================================
-        # 2️⃣ 개별 고객 탭: 정산수익금 기능 탑재!
+        # 2️⃣ 개별 고객 탭: 두 가지 그래프 분리!
         # ==========================================
         for i, client in enumerate(client_list):
             with tabs[i+1]:
@@ -118,8 +119,8 @@ try:
                     acc_df = client_df[client_df['계좌명'] == account]
                     latest_data = acc_df.iloc[-1]
                     
-                    # ⭐ 5칸으로 늘어난 상단 요약 박스!
-                    cols = st.columns(5)
+                    # ⭐ 6칸으로 확장된 요약 박스 (투자원금 추가)
+                    cols = st.columns(6)
                     if "초기투자금" in acc_df.columns:
                         cols[0].metric("초기투자금", f"{latest_data['초기투자금']:,.0f}원")
                     if "추가투자금" in acc_df.columns:
@@ -127,42 +128,61 @@ try:
                     if "정산수익금" in acc_df.columns:
                         total_settlement = acc_df['정산수익금'].sum()
                         cols[2].metric("총 정산수익금", f"{total_settlement:,.0f}원")
+                    if "투자원금" in acc_df.columns:
+                        cols[3].metric("투자원금", f"{latest_data['투자원금']:,.0f}원")
                     if "총투자금" in acc_df.columns:
-                        cols[3].metric("총투자금", f"{latest_data['총투자금']:,.0f}원")
-                    if "평가자산" in acc_df.columns:
-                        cols[4].metric("현재 평가자산", f"{latest_data['평가자산']:,.0f}원", f"{latest_data['수익률(%)']}%")
+                        cols[4].metric("총투자금", f"{latest_data['총투자금']:,.0f}원")
+                    if "평가자산" in acc_df.columns and "수익률(%)" in acc_df.columns:
+                        cols[5].metric("현재 평가자산", f"{latest_data['평가자산']:,.0f}원", f"총 {latest_data['수익률(%)']}%")
                     
-                    # 라인 그래프 그리기
-                    fig = px.line(acc_df, x="날짜", y="수익률(%)", markers=True, 
-                                  title=f"{client} 고객님의 [{account}] 누적 수익률 추이")
-                    fig.update_traces(line=dict(width=3), marker=dict(size=8))
+                    st.markdown("<br>", unsafe_allow_html=True)
                     
-                    # ⭐ 핵심 마법: 정산이 발생한 날짜에 크고 빨간 별표(⭐)와 글씨를 달아줍니다!
-                    if "정산수익금" in acc_df.columns:
-                        settlements = acc_df[acc_df["정산수익금"] != 0] # 0이 아닌(정산된) 날짜 추출
-                        if not settlements.empty:
-                            fig.add_scatter(
-                                x=settlements["날짜"], 
-                                y=settlements["수익률(%)"],
-                                mode="markers+text",
-                                marker=dict(color="red", size=16, symbol="star"),
-                                text=["<b>💰정산</b>"] * len(settlements),
-                                textposition="top center",
-                                textfont=dict(color="red", size=16),
-                                name="정산 발생 시점"
-                            )
-                            
-                    st.plotly_chart(fig, use_container_width=True)
+                    # --- 📈 그래프 1: 원금대비 수익률 (눈에 확 띄는 주황색) ---
+                    if "원금대비 수익률(%)" in acc_df.columns:
+                        fig1 = px.line(acc_df, x="날짜", y="원금대비 수익률(%)", markers=True, 
+                                      title=f"🟠 {client} 고객님의 [{account}] 원금대비 수익률 추이",
+                                      color_discrete_sequence=['#FF7F0E']) # 주황색
+                        fig1.update_traces(line=dict(width=3), marker=dict(size=8))
+                        
+                        if "정산수익금" in acc_df.columns:
+                            settlements = acc_df[acc_df["정산수익금"] != 0]
+                            if not settlements.empty:
+                                fig1.add_scatter(
+                                    x=settlements["날짜"], y=settlements["원금대비 수익률(%)"],
+                                    mode="markers+text", marker=dict(color="red", size=16, symbol="star"),
+                                    text=["<b>💰정산</b>"] * len(settlements), textposition="top center",
+                                    textfont=dict(color="red", size=16), name="정산 발생 시점"
+                                )
+                        st.plotly_chart(fig1, use_container_width=True)
+                        
+                    # --- 📈 그래프 2: 총 수익률 (차분하고 신뢰감 있는 파란색) ---
+                    if "수익률(%)" in acc_df.columns:
+                        fig2 = px.line(acc_df, x="날짜", y="수익률(%)", markers=True, 
+                                      title=f"🔵 {client} 고객님의 [{account}] 총 수익률 추이",
+                                      color_discrete_sequence=['#1F77B4']) # 파란색
+                        fig2.update_traces(line=dict(width=3), marker=dict(size=8))
+                        
+                        if "정산수익금" in acc_df.columns:
+                            settlements = acc_df[acc_df["정산수익금"] != 0]
+                            if not settlements.empty:
+                                fig2.add_scatter(
+                                    x=settlements["날짜"], y=settlements["수익률(%)"],
+                                    mode="markers+text", marker=dict(color="red", size=16, symbol="star"),
+                                    text=["<b>💰정산</b>"] * len(settlements), textposition="top center",
+                                    textfont=dict(color="red", size=16), name="정산 발생 시점"
+                                )
+                        st.plotly_chart(fig2, use_container_width=True)
                     
-                    latest_return = latest_data["수익률(%)"]
-                    simul_amount = 10000000 * (latest_return / 100)
-                    
-                    st.markdown("---")
-                    st.subheader("💡 1,000만 원 투자 시뮬레이션")
-                    if latest_return >= 100:
-                        st.success(f"현재 수익률 **{latest_return}%** 기준, 1,000만 원 투자 시 👉 **{simul_amount:,.0f}원** 📈")
-                    else:
-                        st.warning(f"현재 수익률 **{latest_return}%** 기준, 1,000만 원 투자 시 👉 **{simul_amount:,.0f}원** 📉")
+                    if "수익률(%)" in acc_df.columns:
+                        latest_return = latest_data["수익률(%)"]
+                        simul_amount = 10000000 * (latest_return / 100)
+                        
+                        st.markdown("---")
+                        st.subheader("💡 1,000만 원 투자 시뮬레이션 (총 수익률 기준)")
+                        if latest_return >= 100:
+                            st.success(f"현재 총 수익률 **{latest_return}%** 기준, 1,000만 원 투자 시 👉 **{simul_amount:,.0f}원** 📈")
+                        else:
+                            st.warning(f"현재 총 수익률 **{latest_return}%** 기준, 1,000만 원 투자 시 👉 **{simul_amount:,.0f}원** 📉")
                     
                     if acc_idx < len(account_list) - 1:
                         st.markdown("<hr style='border: 2px dashed #bbb; margin-top: 30px; margin-bottom: 30px;'>", unsafe_allow_html=True)
@@ -173,4 +193,3 @@ try:
 except Exception as e:
     st.error("데이터를 불러오거나 계산하는 중 오류가 발생했습니다.")
     st.write("🔧 상세 에러:", e)
-
