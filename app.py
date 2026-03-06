@@ -21,9 +21,15 @@ def load_data():
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
     df = pd.read_csv(url)
     
-    # ⭐ 초강력 진공청소기: '총 투자금', '총투자금' 등 1행 제목의 띄어쓰기를 모조리 삭제해서 에러 원천 차단!
+    # ⭐ 초강력 진공청소기: 띄어쓰기 모조리 삭제!
     df.columns = df.columns.str.replace(' ', '')
     df.columns = df.columns.str.strip()
+    
+    # ⭐ 찰떡 알아듣기 기능: '총수익률(%)'이라고 적혀있어도 내부적으로 '수익률(%)'로 번역해서 읽습니다!
+    if '총수익률(%)' in df.columns:
+        df.rename(columns={'총수익률(%)': '수익률(%)'}, inplace=True)
+    if '랩종류' in df.columns and '계좌명' not in df.columns:
+        df.rename(columns={'랩종류': '계좌명'}, inplace=True)
     
     if '고객명' in df.columns:
         df = df.dropna(subset=['고객명'])
@@ -35,7 +41,7 @@ def load_data():
     else:
         df['계좌명'] = df['계좌명'].fillna('기본랩')
     
-    # ⭐ 띄어쓰기를 뺀 정확한 기둥 이름들 ('누적수익금' 추가 완료!)
+    # '누적수익금' 포함 모든 숫자 정제
     cols_to_clean = ['초기투자금', '추가투자금', '정산수익금', '누적수익금', '투자원금', '총투자금', '평가자산', '원금대비수익률(%)', '수익률(%)']
     for col in cols_to_clean:
         if col in df.columns:
@@ -56,7 +62,7 @@ try:
         tabs = st.tabs(["🏆 랩 종류별 연도 평균"] + list(client_list))
         
         # ==========================================
-        # 1️⃣ 첫 번째 탭: 랩 종류별 상하단 분리
+        # 1️⃣ 첫 번째 탭: 랩 종류별 연도 평균
         # ==========================================
         with tabs[0]:
             st.header("🏆 가입 연도 및 랩 종류별 고객 평균 총 수익률")
@@ -64,6 +70,7 @@ try:
             latest_df = df.sort_values('날짜').groupby(['고객명', '계좌명']).tail(1).copy()
             latest_df['가입연도'] = latest_df['투자시작일'].astype(str).str.strip().str[:4] + "년"
             
+            # 이제 '총 수익률'이라고 적어도 여기서 완벽하게 캐치합니다!
             if '수익률(%)' in latest_df.columns:
                 yearly_avg = latest_df.groupby(['가입연도', '계좌명'])['수익률(%)'].mean().reset_index()
                 yearly_avg.rename(columns={'수익률(%)': '평균 수익률(%)'}, inplace=True)
@@ -103,9 +110,11 @@ try:
                                 st.warning(f"**{year} 가입자**\n\n평균 {avg_return}% 📉\n\n**{simul_amount:,.0f}원**")
                     
                     st.markdown("<br><hr style='border: 2px dashed #bbb;'><br>", unsafe_allow_html=True)
+            else:
+                st.warning("⚠️ 구글 시트에 '수익률(%)' 또는 '총 수익률(%)' 항목이 없습니다.")
         
         # ==========================================
-        # 2️⃣ 개별 고객 탭: 두 가지 그래프 분리 & 누적수익금 적용!
+        # 2️⃣ 개별 고객 탭: 두 가지 그래프 & 누적수익금
         # ==========================================
         for i, client in enumerate(client_list):
             with tabs[i+1]:
@@ -121,7 +130,7 @@ try:
                     acc_df = client_df[client_df['계좌명'] == account]
                     latest_data = acc_df.iloc[-1]
                     
-                    # ⭐ 기삼님의 완벽한 아이디어 반영: '누적수익금'을 요약 박스에 표시!
+                    # 6칸 요약 박스 (누적수익금 표시!)
                     cols = st.columns(6)
                     if "초기투자금" in acc_df.columns:
                         cols[0].metric("초기투자금", f"{latest_data['초기투자금']:,.0f}원")
@@ -145,7 +154,6 @@ try:
                                       color_discrete_sequence=['#FF7F0E'])
                         fig1.update_traces(line=dict(width=3), marker=dict(size=8))
                         
-                        # 오직 '정산수익금'에 숫자가 적힌 그 날짜에만 별표가 찍힙니다!
                         if "정산수익금" in acc_df.columns:
                             settlements = acc_df[acc_df["정산수익금"] != 0]
                             if not settlements.empty:
