@@ -4,7 +4,7 @@ import plotly.express as px
 
 st.set_page_config(layout="wide", page_title="랩어카운트 대시보드")
 
-# 💡 기삼님이 주신 진짜 완벽한 시트 아이디! (박제 완료)
+# 💡 기삼님이 주신 진짜 완벽한 시트 아이디!
 SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
 
 def mask_name(name):
@@ -49,6 +49,7 @@ def load_data():
 st.title("📈 랩어카운트 수익 관리 대시보드")
 st.caption("※ 데이터 추가/수정은 구글 스프레드시트에서 진행하시면 1분 내로 이곳에 자동 반영됩니다.")
 
+# 여기서부터 try 문이 시작됩니다!
 try:
     df = load_data()
     
@@ -148,4 +149,90 @@ try:
                     if "투자원금" in acc_df.columns:
                         col3.metric("🟰 투자원금", f"{latest_data['투자원금']:,.0f}원")
                     
-                    st
+                    st.markdown("##### 2️⃣ 정산 및 운용 자금")
+                    col4, col5, col_empty = st.columns(3)
+                    if "누적수익금" in acc_df.columns:
+                        col4.metric("💰 총 누적(정산)수익금", f"{latest_data['누적수익금']:,.0f}원")
+                    if "총투자금" in acc_df.columns:
+                        col5.metric("🏦 총투자금", f"{latest_data['총투자금']:,.0f}원")
+                        
+                    st.markdown("##### 3️⃣ 현재 평가 자산 및 수익률")
+                    col6, col7, col8 = st.columns(3)
+                    if "평가자산" in acc_df.columns:
+                        col6.metric("💎 현재 평가자산", f"{latest_data['평가자산']:,.0f}원")
+                    if "원금대비수익률(%)" in acc_df.columns:
+                        col7.metric("🟠 원금대비 수익률", f"{latest_data['원금대비수익률(%)']}%")
+                    if "수익률(%)" in acc_df.columns:
+                        col8.metric("🔵 총 수익률", f"{latest_data['수익률(%)']}%")
+                    
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    
+                    if "원금대비수익률(%)" in acc_df.columns:
+                        fig1 = px.line(acc_df, x="날짜", y="원금대비수익률(%)", markers=True, 
+                                      title=f"🟠 {safe_client_name} 고객님의 [{account}] 원금대비 수익률 추이",
+                                      color_discrete_sequence=['#FF7F0E'])
+                        fig1.update_traces(line=dict(width=3), marker=dict(size=8))
+                        
+                        if "정산수익금" in acc_df.columns:
+                            settlements = acc_df[acc_df["정산수익금"] != 0]
+                            if not settlements.empty:
+                                fig1.add_scatter(
+                                    x=settlements["날짜"], y=settlements["원금대비수익률(%)"],
+                                    mode="markers+text", marker=dict(color="red", size=16, symbol="star"),
+                                    text=["<b>💰정산</b>"] * len(settlements), textposition="top center",
+                                    textfont=dict(color="red", size=16), name="정산 발생 시점"
+                                )
+                        st.plotly_chart(fig1, use_container_width=True)
+                        
+                    if "수익률(%)" in acc_df.columns:
+                        fig2 = px.line(acc_df, x="날짜", y="수익률(%)", markers=True, 
+                                      title=f"🔵 {safe_client_name} 고객님의 [{account}] 총 수익률 추이",
+                                      color_discrete_sequence=['#1F77B4'])
+                        fig2.update_traces(line=dict(width=3), marker=dict(size=8))
+                        
+                        if "정산수익금" in acc_df.columns:
+                            settlements = acc_df[acc_df["정산수익금"] != 0]
+                            if not settlements.empty:
+                                fig2.add_scatter(
+                                    x=settlements["날짜"], y=settlements["수익률(%)"],
+                                    mode="markers+text", marker=dict(color="red", size=16, symbol="star"),
+                                    text=["<b>💰정산</b>"] * len(settlements), textposition="top center",
+                                    textfont=dict(color="red", size=16), name="정산 발생 시점"
+                                )
+                        st.plotly_chart(fig2, use_container_width=True)
+                    
+                    if "수익률(%)" in acc_df.columns and "원금대비수익률(%)" in acc_df.columns:
+                        latest_tot = latest_data["수익률(%)"]
+                        latest_prin = latest_data["원금대비수익률(%)"]
+                        
+                        simul_tot = 10000000 * (latest_tot / 100)
+                        simul_prin = 10000000 * (latest_prin / 100)
+                        
+                        st.markdown("---")
+                        st.subheader("💡 1,000만 원 투자 시뮬레이션 비교")
+                        scol1, scol2 = st.columns(2)
+                        
+                        with scol1:
+                            st.markdown("##### 🟠 원금대비 수익률 기준")
+                            if latest_prin >= 100:
+                                st.success(f"현재 수익률 **{latest_prin}%** 기준\n\n👉 **{simul_prin:,.0f}원** 📈")
+                            else:
+                                st.warning(f"현재 수익률 **{latest_prin}%** 기준\n\n👉 **{simul_prin:,.0f}원** 📉")
+                                
+                        with scol2:
+                            st.markdown("##### 🔵 총 수익률 기준")
+                            if latest_tot >= 100:
+                                st.success(f"현재 수익률 **{latest_tot}%** 기준\n\n👉 **{simul_tot:,.0f}원** 📈")
+                            else:
+                                st.warning(f"현재 수익률 **{latest_tot}%** 기준\n\n👉 **{simul_tot:,.0f}원** 📉")
+                    
+                    if acc_idx < len(account_list) - 1:
+                        st.markdown("<hr style='border: 2px dashed #bbb; margin-top: 30px; margin-bottom: 30px;'>", unsafe_allow_html=True)
+                        
+    else:
+        st.info("구글 스프레드시트에 아직 입력된 데이터가 없습니다.")
+
+# 🚨 이 아랫부분(except)이 잘려 나가서 에러가 났던 것입니다! 꼭 끝까지 복사해 주세요!
+except Exception as e:
+    st.error("데이터를 불러오거나 계산하는 중 오류가 발생했습니다.")
+    st.write("🔧 상세 에러:", e)
