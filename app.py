@@ -5,7 +5,7 @@ import plotly.express as px
 st.set_page_config(layout="wide", page_title="랩어카운트 대시보드")
 
 # 💡 기삼님의 시트 아이디 (고정)
-SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
+SHEET_ID = "1KQGu9NH2iKmBTYDMTEHxxlPnTlFOEoTyB9fN6cf-gek"
 
 def mask_name(name):
     name = str(name).strip()
@@ -21,7 +21,6 @@ def load_data():
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
     df = pd.read_csv(url)
     
-    # ⭐ 초강력 진공청소기: 띄어쓰기 모조리 삭제
     df.columns = df.columns.str.replace(' ', '')
     df.columns = df.columns.str.strip()
     
@@ -33,7 +32,7 @@ def load_data():
     if '고객명' in df.columns:
         df = df.dropna(subset=['고객명'])
         df = df[df['고객명'].str.strip() != '']
-        df['고객명'] = df['고객명'].apply(mask_name)
+        # 🚨 주의: 여기서 바로 이름을 마스킹하지 않고, 데이터 분류를 위해 원본을 살려둡니다!
         
     if '계좌명' not in df.columns:
         df['계좌명'] = '기본랩'
@@ -56,11 +55,16 @@ try:
     
     if not df.empty:
         st.success("✅ 구글 스프레드시트와 실시간 연동 중입니다.")
+        
+        # 원본 이름 리스트 추출 (이영국, 이종국 구분을 위해)
         client_list = df["고객명"].unique()
-        tabs = st.tabs(["🏆 랩 종류별 연도 평균"] + list(client_list))
+        
+        # 탭을 만들 때는 마스킹된 이름으로 예쁘게 덮어줍니다.
+        tab_titles = ["🏆 랩 종류별 연도 평균"] + [mask_name(c) for c in client_list]
+        tabs = st.tabs(tab_titles)
         
         # ==========================================
-        # 1️⃣ 첫 번째 탭: 연도별 '원금대비' vs '총수익률' 나란히 비교!
+        # 1️⃣ 첫 번째 탭: 메인 요약 화면 (시뮬레이션 상단 배치!)
         # ==========================================
         with tabs[0]:
             st.header("🏆 가입 연도 및 랩 종류별 고객 평균 수익률")
@@ -69,7 +73,6 @@ try:
             latest_df['가입연도'] = latest_df['투자시작일'].astype(str).str.strip().str[:4] + "년"
             
             if '수익률(%)' in latest_df.columns and '원금대비수익률(%)' in latest_df.columns:
-                # 두 가지 수익률의 평균을 동시에 구합니다.
                 yearly_avg = latest_df.groupby(['가입연도', '계좌명'])[['원금대비수익률(%)', '수익률(%)']].mean().reset_index()
                 yearly_avg = yearly_avg.round(2)
                 
@@ -79,11 +82,26 @@ try:
                     st.markdown(f"### 📊 [{acc}] 가입 연도별 평균 수익률 비교")
                     acc_data = yearly_avg[yearly_avg['계좌명'] == acc]
                     
-                    # 두 개의 막대를 나란히 세우기 위해 데이터를 변형(Melt) 합니다.
+                    # ⭐ 기삼님 특별 요청: 원금대비 기준 시뮬레이션을 그래프보다 먼저 똬악!
+                    st.markdown(f"**💡 [{acc}] 1,000만 원 투자 시뮬레이션 (원금대비 기준)**")
+                    cols = st.columns(len(acc_data))
+                    for idx, (_, row) in enumerate(acc_data.iterrows()):
+                        year = row['가입연도']
+                        avg_prin = row['원금대비수익률(%)']
+                        simul_prin = 10000000 * (avg_prin / 100)
+                        
+                        with cols[idx]:
+                            if avg_prin >= 100:
+                                st.success(f"**{year} 가입자 평균**\n\n👉 **{simul_prin:,.0f}원** ({avg_prin}%) 📈")
+                            else:
+                                st.warning(f"**{year} 가입자 평균**\n\n👉 **{simul_prin:,.0f}원** ({avg_prin}%) 📉")
+                    
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    
+                    # 그 다음 그래프가 나옵니다
                     acc_data_melted = acc_data.melt(id_vars=['가입연도'], value_vars=['원금대비수익률(%)', '수익률(%)'], 
                                                     var_name='수익률 종류', value_name='평균(%)')
                     
-                    # 이름표를 예쁘게 바꿔줍니다.
                     acc_data_melted['수익률 종류'] = acc_data_melted['수익률 종류'].replace({
                         '원금대비수익률(%)': '🟠 원금대비 수익률',
                         '수익률(%)': '🔵 총 수익률'
@@ -104,36 +122,24 @@ try:
                     fig_year.update_layout(yaxis=dict(range=[min(0, y_min * 1.2), y_max * 1.3]), legend_title_text='')
                     st.plotly_chart(fig_year, use_container_width=True)
                     
-                    # ⭐ 두 가지 버전의 시뮬레이션
-                    st.markdown(f"**💡 [{acc}] 1,000만 원 투자 시뮬레이션**")
-                    cols = st.columns(len(acc_data))
-                    for idx, (_, row) in enumerate(acc_data.iterrows()):
-                        year = row['가입연도']
-                        avg_prin = row['원금대비수익률(%)']
-                        avg_tot = row['수익률(%)']
-                        
-                        simul_prin = 10000000 * (avg_prin / 100)
-                        simul_tot = 10000000 * (avg_tot / 100)
-                        
-                        with cols[idx]:
-                            st.info(f"**{year} 가입자 평균**\n\n"
-                                    f"🟠 원금대비: **{simul_prin:,.0f}원** ({avg_prin}%)\n\n"
-                                    f"🔵 총 수익률: **{simul_tot:,.0f}원** ({avg_tot}%)")
-                    
-                    st.markdown("<br><hr style='border: 2px dashed #bbb;'><br>", unsafe_allow_html=True)
+                    st.markdown("<hr style='border: 2px dashed #bbb;'><br>", unsafe_allow_html=True)
             else:
                 st.warning("⚠️ 구글 시트에 '수익률(%)' 또는 '원금대비수익률(%)' 항목이 없습니다.")
         
         # ==========================================
-        # 2️⃣ 개별 고객 탭: 3단 분리 요약 박스 & 듀얼 시뮬레이션!
+        # 2️⃣ 개별 고객 탭: 이름 마스킹 분리 기술 적용!
         # ==========================================
         for i, client in enumerate(client_list):
             with tabs[i+1]:
+                # 여기서 철저하게 원본 이름(client)으로 데이터를 필터링합니다! (이영국 vs 이종국 완벽 분리)
                 client_df = df[df["고객명"] == client].sort_values(by="날짜")
                 account_list = client_df['계좌명'].unique()
                 
+                # 고객에게 보여줄 때는 안전하게 마스킹된 이름을 씁니다.
+                safe_client_name = mask_name(client)
+                
                 c_start = client_df["투자시작일"].iloc[0] if "투자시작일" in client_df.columns else "정보없음"
-                st.info(f"👤 **{client}** 고객님 | 📅 최초 투자 시작일: **{c_start}** | 📂 보유 계좌: **{len(account_list)}개**")
+                st.info(f"👤 **{safe_client_name}** 고객님 | 📅 최초 투자 시작일: **{c_start}** | 📂 보유 계좌: **{len(account_list)}개**")
                 
                 for acc_idx, account in enumerate(account_list):
                     st.markdown(f"### 📊 [{account}] 운용 현황")
@@ -141,7 +147,7 @@ try:
                     acc_df = client_df[client_df['계좌명'] == account]
                     latest_data = acc_df.iloc[-1]
                     
-                    # ⭐ 기삼님의 완벽한 3단 줄바꿈 레이아웃 적용!
+                    # 3단 줄바꿈 레이아웃
                     st.markdown("##### 1️⃣ 투자 원금 구성")
                     col1, col2, col3 = st.columns(3)
                     if "초기투자금" in acc_df.columns:
@@ -169,10 +175,10 @@ try:
                     
                     st.markdown("<br>", unsafe_allow_html=True)
                     
-                    # --- 📈 그래프 1: 원금대비 수익률 (주황색) ---
+                    # --- 📈 그래프 1: 원금대비 수익률 ---
                     if "원금대비수익률(%)" in acc_df.columns:
                         fig1 = px.line(acc_df, x="날짜", y="원금대비수익률(%)", markers=True, 
-                                      title=f"🟠 {client} 고객님의 [{account}] 원금대비 수익률 추이",
+                                      title=f"🟠 {safe_client_name} 고객님의 [{account}] 원금대비 수익률 추이",
                                       color_discrete_sequence=['#FF7F0E'])
                         fig1.update_traces(line=dict(width=3), marker=dict(size=8))
                         
@@ -187,10 +193,10 @@ try:
                                 )
                         st.plotly_chart(fig1, use_container_width=True)
                         
-                    # --- 📈 그래프 2: 총 수익률 (파란색) ---
+                    # --- 📈 그래프 2: 총 수익률 ---
                     if "수익률(%)" in acc_df.columns:
                         fig2 = px.line(acc_df, x="날짜", y="수익률(%)", markers=True, 
-                                      title=f"🔵 {client} 고객님의 [{account}] 총 수익률 추이",
+                                      title=f"🔵 {safe_client_name} 고객님의 [{account}] 총 수익률 추이",
                                       color_discrete_sequence=['#1F77B4'])
                         fig2.update_traces(line=dict(width=3), marker=dict(size=8))
                         
@@ -205,7 +211,6 @@ try:
                                 )
                         st.plotly_chart(fig2, use_container_width=True)
                     
-                    # ⭐ 기삼님 요청: 2가지 버전 시뮬레이션 동시 표시!
                     if "수익률(%)" in acc_df.columns and "원금대비수익률(%)" in acc_df.columns:
                         latest_tot = latest_data["수익률(%)"]
                         latest_prin = latest_data["원금대비수익률(%)"]
