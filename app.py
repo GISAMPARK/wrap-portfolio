@@ -52,9 +52,13 @@ selected_client = st.selectbox("고객을 선택하세요", df['고객명'].uniq
 client_df = df[df['고객명'] == selected_client]
 
 # 요청하신 1번: 계좌별 최초 가입일 기재
+# 📅 계좌별 최초 가입일 표시 부분
 st.markdown("#### 📅 계좌별 최초 가입일")
 for _, row in client_df.drop_duplicates('계좌명').iterrows():
-    st.write(f"- {row['계좌명']} 최초가입일: {row['최초가입일']}")
+    # 여기서 '최초가입일'이라는 글자를 실제 기삼님 구글 시트의 제목과 똑같이 고쳐주세요!
+    # 예: 만약 시트 제목이 '투자시작일'이라면 '최초가입일' 대신 '투자시작일'이라고 쓰세요.
+    reg_date = row.get('최초가입일', '정보없음') 
+    st.write(f"- {row['계좌명']} 최초가입일: {reg_date}")
 
 # 요청하신 2번: 정산 문구
 st.markdown("#### 💰 정산 이력")
