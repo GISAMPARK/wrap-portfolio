@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import yfinance as yf
+import plotly.express as px
 
 st.set_page_config(layout="wide", page_title="랩어카운트 대시보드")
 SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
@@ -12,42 +13,42 @@ def load_data():
     df.columns = ['투자시작일', '날짜', '계좌명', '고객명', '초기투자금', '추가투자금', '정산수익금', '누적수익금', '투자원금', '총투자금', '평가자산', '원금대비수익률', '총수익률']
     return df
 
-# 데이터 로드
+# 지수 가져오기
+@st.cache_data(ttl=900)
+def get_market_data():
+    tickers = {"코스피": "^KS11", "코스닥": "^KQ11", "S&P 500": "^GSPC", "나스닥": "^IXIC"}
+    results = {}
+    for name, ticker in tickers.items():
+        try:
+            tk = yf.Ticker(ticker)
+            hist = tk.history(period="2d")
+            change = ((hist['Close'].iloc[-1] - hist['Close'].iloc[-2]) / hist['Close'].iloc[-2]) * 100
+            results[name] = change
+        except:
+            results[name] = 0
+    return results
+
+# 메인 화면 구성
+st.title("📈 랩어카운트 통합 대시보드")
+
+# 1. 상단: 증시 지수
+market = get_market_data()
+cols = st.columns(4)
+for i, (name, val) in enumerate(market.items()):
+    cols[i].metric(name, f"{val:+.2f}%")
+
+st.markdown("---")
+
+# 2. 랩 연도별 수익률 그래프
 df = load_data()
+st.subheader("📊 랩 연도별 원금 대비 수익률")
 
-# 1. 메인 화면: 전체 현황
-st.title("📈 랩어카운트 수익 관리 대시보드")
-st.markdown("---")
-st.subheader("📊 전체 랩 운용 현황")
+# 숫자 변환을 위한 전처리
+df['수익률_num'] = df['원금대비수익률'].astype(str).str.replace('%', '').str.replace('None', '0').astype(float)
+df['연도'] = pd.to_datetime(df['투자시작일']).dt.year
 
-# 평균 수익률 계산
-temp_df = df['총수익률'].astype(str).str.replace('%', '').replace('None', '0')
-avg_yield = pd.to_numeric(temp_df).mean()
+fig = px.bar(df, x='연도', y='수익률_num', color='계좌명', barmode='group', title="연도별 수익률 현황")
+st.plotly_chart(fig, use_container_width=True)
 
-col1, col2 = st.columns(2)
-col1.metric("전체 평균 수익률", f"{avg_yield:.2f}%")
-col2.metric("총 관리 고객수", f"{df['고객명'].nunique()}명")
-
-st.markdown("---")
-
-# 2. 개별 상세 관리
-st.subheader("👤 고객별 상세 관리")
-client_list = df['고객명'].dropna().unique()
-selected_client = st.selectbox("조회할 고객을 선택하세요", client_list)
-client_df = df[df['고객명'] == selected_client]
-
-st.markdown(f"### 📋 {selected_client}님 상세 현황")
-
-# 계좌별 가입일 표시
-st.markdown("📅 **계좌별 최초 가입일**")
-for _, row in client_df.drop_duplicates('계좌명').iterrows():
-    st.write(f"- {row['계좌명']}: {row['투자시작일']}")
-
-# 정산 정보 (숫자값만 깔끔하게 출력)
-st.markdown("💰 **정산 상세 정보**")
-details = client_df[client_df['정산수익금'].astype(str) != 'W0'][['정산수익금', '원금대비수익률', '총수익률']]
-
-if not details.empty:
-    st.table(details.rename(columns={'정산수익금': '수익금', '원금대비수익률': '원금대비(%)', '총수익률': '총수익(%)'}))
-else:
-    st.write("해당 고객의 정산 내역이 없습니다.")
+# 3. 하단: 상세 표
+st.dataframe(df[['고객명', '계좌명', '투자시작일', '원금대비수익률', '총수익률']])
