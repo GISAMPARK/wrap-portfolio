@@ -9,12 +9,7 @@ SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
 def load_data():
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
     df = pd.read_csv(url)
-    # 데이터 제목이 깨지지 않도록 순서대로 이름을 강제 할당
-    df.columns = [
-        '투자시작일', '날짜', '계좌명', '고객명', '초기투자금', '추가투자금', 
-        '정산수익금', '누적수익금', '투자원금', '총투자금', '평가자산', 
-        '원금대비수익률', '총수익률'
-    ]
+    df.columns = ['투자시작일', '날짜', '계좌명', '고객명', '초기투자금', '추가투자금', '정산수익금', '누적수익금', '투자원금', '총투자금', '평가자산', '원금대비수익률', '총수익률']
     return df
 
 @st.cache_data(ttl=900)
@@ -34,38 +29,28 @@ def get_market_data():
             results[name] = None
     return results, total_change
 
-# --- 메인 실행 ---
 st.title("📈 랩어카운트 수익 관리 대시보드")
 df = load_data()
 market_data, total_change = get_market_data()
-
-# 곰돌이
-col1, col2 = st.columns([1, 4])
-with col1:
-    st.markdown("## " + ("🐻☀️" if total_change >= 0 else "🐻☔"))
-with col2:
-    for name, change in market_data.items():
-        if change is not None:
-            st.write(f"**{name}**: {change:+.2f}%")
 
 # 고객 선택
 client_list = df['고객명'].dropna().unique()
 selected_client = st.selectbox("고객을 선택하세요", client_list)
 client_df = df[df['고객명'] == selected_client]
 
-# 가입일
-st.markdown("### 📅 계좌별 최초 가입일")
-for _, row in client_df.drop_duplicates('계좌명').iterrows():
-    st.write(f"- **{row['계좌명']}** 최초가입일: {row['투자시작일']}")
-
-# 정산 이력 - 데이터 강제 출력
+# 정산 이력 - 데이터 강제 출력 (핵심 수정)
 st.markdown("### 💰 정산 이력")
 found = False
 for _, row in client_df.iterrows():
-    # '정산수익금'이 비어있지 않거나 0이 아닌 경우만 표시
-    if pd.notnull(row['정산수익금']) and str(row['정산수익금']).strip() != '0' and str(row['정산수익금']).strip() != 'W0':
-        st.write(f"- 정산 발생: 수익금 {row['정산수익금']} | 원금대비 {row['원금대비수익률']} | 총수익률 {row['총수익률']}")
-        found = True
+    # 데이터에서 'W'나 ','를 제거하고 숫자로 강제 변환하여 체크
+    raw_val = str(row['정산수익금']).replace('W', '').replace(',', '').strip()
+    try:
+        val_float = float(raw_val)
+        if val_float > 0: # 0보다 큰 수익금이 있으면 표시
+            st.write(f"- 정산 발생: 수익금 {row['정산수익금']} | 원금대비 {row['원금대비수익률']} | 총수익률 {row['총수익률']}")
+            found = True
+    except:
+        continue # 숫자가 아니면 패스
 
 if not found:
     st.write("해당 고객의 정산 내역이 없습니다.")
