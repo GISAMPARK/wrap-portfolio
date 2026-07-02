@@ -9,7 +9,14 @@ SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
 def load_data():
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
     df = pd.read_csv(url)
-    df.columns = df.columns.str.replace(' ', '').str.replace('"', '').str.strip()
+    
+    # 💡 핵심: 시트의 실제 제목이 무엇이든, 순서대로 우리만의 깔끔한 이름으로 재지정합니다.
+    # 기삼님의 시트 열 순서에 맞춰 이름을 다시 정의했습니다.
+    df.columns = [
+        '투자시작일', '날짜', '계좌명', '고객명', '초기투자금', '추가투자금', 
+        '정산수익금', '누적수익금', '투자원금', '총투자금', '평가자산', 
+        '원금대비수익률', '총수익률'
+    ]
     return df
 
 @st.cache_data(ttl=900)
@@ -44,27 +51,27 @@ try:
             if change is not None:
                 st.write(f"**{name}**: {change:+.2f}%")
 
+    # 고객 선택
     client_list = df['고객명'].dropna().unique()
     selected_client = st.selectbox("고객을 선택하세요", client_list)
     client_df = df[df['고객명'] == selected_client]
 
     st.markdown("### 📅 계좌별 최초 가입일")
     for _, row in client_df.drop_duplicates('계좌명').iterrows():
-        # 데이터가 없을 경우를 대비하여 .get() 사용
-        date_val = row.get('투자시작일', '정보없음')
-        st.write(f"- **{row['계좌명']}** 최초가입일: {date_val}")
+        st.write(f"- **{row['계좌명']}** 최초가입일: {row['투자시작일']}")
 
     st.markdown("### 💰 정산 이력")
-    # 정산수익금이 'None'이거나 비어있지 않은 것만 필터링
-    filtered_df = client_df[client_df['정산수익금'].notnull() & (client_df['정산수익금'] != 'None')]
+    # 정산수익금 열이 숫자인 경우만 표시
+    has_data = False
+    for _, row in client_df.iterrows():
+        # 데이터가 'None' 텍스트이거나 비어있으면 건너뜁니다.
+        val = str(row['정산수익금']).strip()
+        if val and val != 'None' and val != 'nan':
+            st.write(f"- 정산 발생 - 원금대비: {row['원금대비수익률']}, 총수익률: {row['총수익률']}")
+            has_data = True
     
-    if not filtered_df.empty:
-        for _, row in filtered_df.iterrows():
-            y1 = row.get('원금대비수익률(%)', '0')
-            y2 = row.get('총수익률(%)', '0')
-            st.write(f"- 정산 발생 - 원금대비: {y1}, 총수익률: {y2}")
-    else:
-        st.write("정산 이력이 없습니다.")
+    if not has_data:
+        st.write("정산 내역이 없습니다.")
 
 except Exception as e:
-    st.error(f"코드 오류: {e}")
+    st.error(f"오류: {e}")
