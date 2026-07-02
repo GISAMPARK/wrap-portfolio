@@ -12,41 +12,42 @@ def load_data():
     df.columns = ['투자시작일', '날짜', '계좌명', '고객명', '초기투자금', '추가투자금', '정산수익금', '누적수익금', '투자원금', '총투자금', '평가자산', '원금대비수익률', '총수익률']
     return df
 
-# --- 메인 실행 ---
-st.title("📈 랩어카운트 수익 관리 대시보드")
+# 데이터 로드
 df = load_data()
 
-# 1. 메인 화면: 전체 랩 평균 수익률 (평균 수익률 계산)
-st.subheader("📊 전체 랩 평균 수익률")
-# 숫자가 아닌 'W' 등 제거 후 평균 계산
-df['총수익률_num'] = df['총수익률'].astype(str).str.replace('%', '').astype(float)
-avg_yield = df['총수익률_num'].mean()
-st.metric(label="현재 전체 평균 수익률", value=f"{avg_yield:.2f}%")
+# 1. 메인 화면: 전체 현황
+st.title("📈 랩어카운트 수익 관리 대시보드")
+st.markdown("---")
+st.subheader("📊 전체 랩 운용 현황")
+
+# 평균 수익률 계산
+temp_df = df['총수익률'].astype(str).str.replace('%', '').replace('None', '0')
+avg_yield = pd.to_numeric(temp_df).mean()
+
+col1, col2 = st.columns(2)
+col1.metric("전체 평균 수익률", f"{avg_yield:.2f}%")
+col2.metric("총 관리 고객수", f"{df['고객명'].nunique()}명")
 
 st.markdown("---")
 
-# 2. 고객 선택 및 상세 정보 (고객별 정산수익금/수익률)
+# 2. 개별 상세 관리
 st.subheader("👤 고객별 상세 관리")
 client_list = df['고객명'].dropna().unique()
-selected_client = st.selectbox("고객을 선택하세요", client_list)
+selected_client = st.selectbox("조회할 고객을 선택하세요", client_list)
 client_df = df[df['고객명'] == selected_client]
 
-st.markdown(f"### {selected_client}님 상세 현황")
+st.markdown(f"### 📋 {selected_client}님 상세 현황")
 
-# 최초가입일
+# 계좌별 가입일 표시
 st.markdown("📅 **계좌별 최초 가입일**")
 for _, row in client_df.drop_duplicates('계좌명').iterrows():
     st.write(f"- {row['계좌명']}: {row['투자시작일']}")
 
-# 정산 수익금 및 수익률
+# 정산 정보 (숫자값만 깔끔하게 출력)
 st.markdown("💰 **정산 상세 정보**")
-found = False
-for _, row in client_df.iterrows():
-    # 데이터가 유효한 경우만 출력
-    val = str(row['정산수익금']).replace('W', '').replace(',', '').strip()
-    if val and val != 'None' and val != '0' and val != 'nan':
-        st.write(f"- 정산 수익금: {row['정산수익금']} | 원금대비 수익률: {row['원금대비수익률']} | 총 수익률: {row['총수익률']}")
-        found = True
+details = client_df[client_df['정산수익금'].astype(str) != 'W0'][['정산수익금', '원금대비수익률', '총수익률']]
 
-if not found:
+if not details.empty:
+    st.table(details.rename(columns={'정산수익금': '수익금', '원금대비수익률': '원금대비(%)', '총수익률': '총수익(%)'}))
+else:
     st.write("해당 고객의 정산 내역이 없습니다.")
