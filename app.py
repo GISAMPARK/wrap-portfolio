@@ -77,8 +77,6 @@ for i, (name, (price, change)) in enumerate(market_data.items()):
     cols[i].metric(label=name, value=f"{price:,.2f}", delta=f"{change:.2f}%")
 
 st.markdown("---")
-
-# 이 아래부터는 기존에 있던 코드들이 그대로 이어지면 됩니다!
             
     return df
 
