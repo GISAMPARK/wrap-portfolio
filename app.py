@@ -5,7 +5,7 @@ import yfinance as yf
 
 st.set_page_config(layout="wide", page_title="랩어카운트 대시보드")
 
-# 💡 기삼님이 주신 진짜 완벽한 시트 아이디!
+# 💡 시트 아이디
 SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
 
 def mask_name(name):
@@ -17,6 +17,7 @@ def mask_name(name):
     else:
         return name[0] + "*" * (len(name) - 2) + name[-1]
 
+# 💡 주말/휴장일 결측치(NaN) 자동 제거 및 최근 거래일 종가 로직 적용
 @st.cache_data(ttl=900)
 def get_market_indices():
     indices = {"코스피": "^KS11", "코스닥": "^KQ11", "S&P 500": "^GSPC", "나스닥": "^IXIC"}
@@ -24,12 +25,18 @@ def get_market_indices():
     for name, ticker in indices.items():
         try:
             tk = yf.Ticker(ticker)
-            hist = tk.history(period="5d") 
+            # 주말/휴장일을 고려해 넉넉히 최근 10일 치 데이터 요청
+            hist = tk.history(period="10d")
+            # 종가(Close)에 NaN(빈 값)이 있는 행 제거
+            hist = hist.dropna(subset=['Close'])
+            
             if len(hist) >= 2:
-                current_price = hist['Close'].iloc[-1]
-                prev_price = hist['Close'].iloc[-2]
+                current_price = hist['Close'].iloc[-1] # 가장 최근 거래일 종가
+                prev_price = hist['Close'].iloc[-2]    # 직전 거래일 종가
                 change_pct = ((current_price - prev_price) / prev_price) * 100
                 data[name] = (current_price, change_pct)
+            elif len(hist) == 1:
+                data[name] = (hist['Close'].iloc[-1], 0.0)
             else:
                 data[name] = (0, 0)
         except Exception:
@@ -75,7 +82,7 @@ try:
     if not df.empty:
         st.success("✅ 구글 스프레드시트와 실시간 연동 중입니다.")
 
-        # 글로벌 증시 출력 추가
+        # 글로벌 증시 출력 (주말에도 최신 종가 표기)
         st.subheader("🌐 실시간 글로벌 증시")
         market_data = get_market_indices()
         cols = st.columns(4)
@@ -88,7 +95,7 @@ try:
         tabs = st.tabs(tab_titles)
         
         # ==========================================
-        # 1️⃣ 첫 번째 탭: 메인 요약 화면 (시뮬레이션 상단 배치)
+        # 1️⃣ 첫 번째 탭: 메인 요약 화면
         # ==========================================
         with tabs[0]:
             st.header("🏆 가입 연도 및 랩 종류별 고객 평균 수익률")
@@ -149,7 +156,7 @@ try:
                 st.warning("⚠️ 구글 시트에 '수익률(%)' 또는 '원금대비수익률(%)' 항목이 없습니다.")
         
         # ==========================================
-        # 2️⃣ 개별 고객 탭: 이름 마스킹 분리 & 3단 요약
+        # 2️⃣ 개별 고객 탭
         # ==========================================
         for i, client in enumerate(client_list):
             with tabs[i+1]:
