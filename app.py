@@ -5,7 +5,7 @@ import yfinance as yf
 
 st.set_page_config(layout="wide", page_title="랩어카운트 대시보드")
 
-# 💡 시트 아이디
+# 💡 기삼님이 주신 진짜 완벽한 시트 아이디!
 SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
 
 def mask_name(name):
@@ -83,15 +83,11 @@ try:
         market_data = get_market_indices()
         
         # ==========================================
-        # 🐻 곰돌이 캐릭터 이미지 및 사이즈 설정 부분
+        # 🐻 곰돌이 날씨 표현 (이모지 조합 + HTML 사이즈 확대)
         # ==========================================
-        # 상승장(해 쨍쨍) 곰돌이 이미지 URL
-        sunny_bear = "https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Animals/Bear.png" 
-        # 하락장(비 오는) 곰돌이 이미지 URL
-        rainy_bear = "https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Closed%20Umbrella.png"
-        
-        # 💡 여기서 곰돌이의 크기를 조절할 수 있습니다! (현재 55px, 더 키우려면 70, 80 등으로 변경)
-        image_size = "55" 
+        # 💡 font-size 숫자를 조절하시면 곰돌이 크기가 더 커지거나 작아집니다!
+        sunny_bear = "<span style='font-size: 45px; vertical-align: middle;'>🐻☀️</span>"
+        rainy_bear = "<span style='font-size: 45px; vertical-align: middle;'>🐻☔</span>"
 
         kr_trend = market_data['코스피'][1] + market_data['코스닥'][1]
         us_trend = market_data['S&P 500'][1] + market_data['나스닥'][1]
@@ -101,15 +97,14 @@ try:
         
         col_kr, col_us = st.columns(2)
         
-        # HTML을 이용해 제목 옆에 큰 이미지를 배치합니다.
         with col_kr:
-            st.markdown(f"#### 🇰🇷 국내 증시 <img src='{kr_img}' width='{image_size}' style='vertical-align: text-bottom;'>", unsafe_allow_html=True)
+            st.markdown(f"#### 🇰🇷 국내 증시 {kr_img}", unsafe_allow_html=True)
             k1, k2 = st.columns(2)
             k1.metric(label="코스피", value=f"{market_data['코스피'][0]:,.2f}", delta=f"{market_data['코스피'][1]:.2f}%")
             k2.metric(label="코스닥", value=f"{market_data['코스닥'][0]:,.2f}", delta=f"{market_data['코스닥'][1]:.2f}%")
             
         with col_us:
-            st.markdown(f"#### 🇺🇸 미국 증시 <img src='{us_img}' width='{image_size}' style='vertical-align: text-bottom;'>", unsafe_allow_html=True)
+            st.markdown(f"#### 🇺🇸 미국 증시 {us_img}", unsafe_allow_html=True)
             u1, u2 = st.columns(2)
             u1.metric(label="S&P 500", value=f"{market_data['S&P 500'][0]:,.2f}", delta=f"{market_data['S&P 500'][1]:.2f}%")
             u2.metric(label="나스닥", value=f"{market_data['나스닥'][0]:,.2f}", delta=f"{market_data['나스닥'][1]:.2f}%")
