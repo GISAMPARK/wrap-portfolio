@@ -1,10 +1,10 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import yfinance as yf
 
 st.set_page_config(layout="wide", page_title="랩어카운트 대시보드")
 
-# 💡 기삼님이 주신 진짜 완벽한 시트 아이디!
 SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
 
 def mask_name(name):
@@ -16,6 +16,26 @@ def mask_name(name):
     else:
         return name[0] + "*" * (len(name) - 2) + name[-1]
 
+# 글로벌 증시 데이터를 가져오는 함수
+@st.cache_data(ttl=900)
+def get_market_indices():
+    indices = {"코스피": "^KS11", "코스닥": "^KQ11", "S&P 500": "^GSPC", "나스닥": "^IXIC"}
+    data = {}
+    for name, ticker in indices.items():
+        try:
+            tk = yf.Ticker(ticker)
+            hist = tk.history(period="5d") 
+            if len(hist) >= 2:
+                current_price = hist['Close'].iloc[-1]
+                prev_price = hist['Close'].iloc[-2]
+                change_pct = ((current_price - prev_price) / prev_price) * 100
+                data[name] = (current_price, change_pct)
+            else:
+                data[name] = (0, 0)
+        except Exception:
+            data[name] = (0, 0)
+    return data
+
 @st.cache_data(ttl=60)
 def load_data():
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
@@ -23,26 +43,42 @@ def load_data():
     
     df.columns = df.columns.str.replace(' ', '')
     df.columns = df.columns.str.strip()
-    
+
     if '총수익률(%)' in df.columns:
         df.rename(columns={'총수익률(%)': '수익률(%)'}, inplace=True)
     if '랩종류' in df.columns and '계좌명' not in df.columns:
         df.rename(columns={'랩종류': '계좌명'}, inplace=True)
-    
+
     if '고객명' in df.columns:
         df = df.dropna(subset=['고객명'])
         df = df[df['고객명'].str.strip() != '']
-        
+
     if '계좌명' not in df.columns:
         df['계좌명'] = '기본랩'
     else:
         df['계좌명'] = df['계좌명'].fillna('기본랩')
-    
+
     cols_to_clean = ['초기투자금', '추가투자금', '정산수익금', '누적수익금', '투자원금', '총투자금', '평가자산', '원금대비수익률(%)', '수익률(%)']
     for col in cols_to_clean:
         if col in df.columns:
             df[col] = df[col].astype(str).str.replace(r'[^\d.-]', '', regex=True)
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+    return df
+
+# --- 메인 화면 출력 ---
+st.title("📈 랩어카운트 수익 관리 대시보드")
+st.success("구글 스프레드시트와 실시간 연동 중입니다.")
+
+# 글로벌 증시 출력 
+st.subheader("🌐 실시간 글로벌 증시")
+market_data = get_market_indices()
+cols = st.columns(4)
+for i, (name, (price, change)) in enumerate(market_data.items()):
+    cols[i].metric(label=name, value=f"{price:,.2f}", delta=f"{change:.2f}%")
+
+st.markdown("---")
+
+# 이 아래부터는 기존에 있던 코드들이 그대로 이어지면 됩니다!
             
     return df
 
