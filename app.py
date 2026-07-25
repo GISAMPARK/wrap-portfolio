@@ -80,22 +80,29 @@ try:
         st.success("✅ 구글 스프레드시트와 실시간 연동 중입니다.")
 
         # ==========================================
-        # 🌐 글로벌 증시 출력 (국내/미국 분리)
+        # 🌐 글로벌 증시 출력 (국내/미국 분리 및 곰돌이 적용)
         # ==========================================
         st.markdown("---")
         market_data = get_market_indices()
+        
+        # 🐻 곰돌이 날씨 결정 로직 (두 지수의 변동률 합산 기준)
+        kr_trend = market_data['코스피'][1] + market_data['코스닥'][1]
+        us_trend = market_data['S&P 500'][1] + market_data['나스닥'][1]
+        
+        kr_bear = "🐻☀️🏃‍♂️" if kr_trend >= 0 else "🐻☔🌧️"
+        us_bear = "🐻☀️🏃‍♂️" if us_trend >= 0 else "🐻☔🌧️"
         
         # 화면을 반으로 나누기 (국내 / 미국)
         col_kr, col_us = st.columns(2)
         
         with col_kr:
-            st.markdown("#### 🇰🇷 국내 증시")
+            st.markdown(f"#### 🇰🇷 국내 증시 {kr_bear}")
             k1, k2 = st.columns(2)
             k1.metric(label="코스피", value=f"{market_data['코스피'][0]:,.2f}", delta=f"{market_data['코스피'][1]:.2f}%")
             k2.metric(label="코스닥", value=f"{market_data['코스닥'][0]:,.2f}", delta=f"{market_data['코스닥'][1]:.2f}%")
             
         with col_us:
-            st.markdown("#### 🇺🇸 미국 증시")
+            st.markdown(f"#### 🇺🇸 미국 증시 {us_bear}")
             u1, u2 = st.columns(2)
             u1.metric(label="S&P 500", value=f"{market_data['S&P 500'][0]:,.2f}", delta=f"{market_data['S&P 500'][1]:.2f}%")
             u2.metric(label="나스닥", value=f"{market_data['나스닥'][0]:,.2f}", delta=f"{market_data['나스닥'][1]:.2f}%")
