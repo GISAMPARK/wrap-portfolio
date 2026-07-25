@@ -5,7 +5,7 @@ import yfinance as yf
 
 st.set_page_config(layout="wide", page_title="랩어카운트 대시보드")
 
-# 💡 시트 아이디
+# 💡 기삼님이 주신 진짜 완벽한 시트 아이디!
 SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
 
 def mask_name(name):
@@ -17,7 +17,6 @@ def mask_name(name):
     else:
         return name[0] + "*" * (len(name) - 2) + name[-1]
 
-# 💡 주말/휴장일 결측치(NaN) 자동 제거 및 최근 거래일 종가 로직 적용
 @st.cache_data(ttl=900)
 def get_market_indices():
     indices = {"코스피": "^KS11", "코스닥": "^KQ11", "S&P 500": "^GSPC", "나스닥": "^IXIC"}
@@ -25,14 +24,12 @@ def get_market_indices():
     for name, ticker in indices.items():
         try:
             tk = yf.Ticker(ticker)
-            # 주말/휴장일을 고려해 넉넉히 최근 10일 치 데이터 요청
             hist = tk.history(period="10d")
-            # 종가(Close)에 NaN(빈 값)이 있는 행 제거
             hist = hist.dropna(subset=['Close'])
             
             if len(hist) >= 2:
-                current_price = hist['Close'].iloc[-1] # 가장 최근 거래일 종가
-                prev_price = hist['Close'].iloc[-2]    # 직전 거래일 종가
+                current_price = hist['Close'].iloc[-1]
+                prev_price = hist['Close'].iloc[-2]
                 change_pct = ((current_price - prev_price) / prev_price) * 100
                 data[name] = (current_price, change_pct)
             elif len(hist) == 1:
@@ -82,12 +79,27 @@ try:
     if not df.empty:
         st.success("✅ 구글 스프레드시트와 실시간 연동 중입니다.")
 
-        # 글로벌 증시 출력 (주말에도 최신 종가 표기)
-        st.subheader("🌐 실시간 글로벌 증시")
+        # ==========================================
+        # 🌐 글로벌 증시 출력 (국내/미국 분리)
+        # ==========================================
+        st.markdown("---")
         market_data = get_market_indices()
-        cols = st.columns(4)
-        for i, (name, (price, change)) in enumerate(market_data.items()):
-            cols[i].metric(label=name, value=f"{price:,.2f}", delta=f"{change:.2f}%")
+        
+        # 화면을 반으로 나누기 (국내 / 미국)
+        col_kr, col_us = st.columns(2)
+        
+        with col_kr:
+            st.markdown("#### 🇰🇷 국내 증시")
+            k1, k2 = st.columns(2)
+            k1.metric(label="코스피", value=f"{market_data['코스피'][0]:,.2f}", delta=f"{market_data['코스피'][1]:.2f}%")
+            k2.metric(label="코스닥", value=f"{market_data['코스닥'][0]:,.2f}", delta=f"{market_data['코스닥'][1]:.2f}%")
+            
+        with col_us:
+            st.markdown("#### 🇺🇸 미국 증시")
+            u1, u2 = st.columns(2)
+            u1.metric(label="S&P 500", value=f"{market_data['S&P 500'][0]:,.2f}", delta=f"{market_data['S&P 500'][1]:.2f}%")
+            u2.metric(label="나스닥", value=f"{market_data['나스닥'][0]:,.2f}", delta=f"{market_data['나스닥'][1]:.2f}%")
+            
         st.markdown("---")
         
         client_list = df["고객명"].unique()
