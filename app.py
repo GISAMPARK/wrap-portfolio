@@ -5,6 +5,7 @@ import yfinance as yf
 
 st.set_page_config(layout="wide", page_title="랩어카운트 대시보드")
 
+# 💡 기삼님이 주신 진짜 완벽한 시트 아이디!
 SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
 
 def mask_name(name):
@@ -16,7 +17,6 @@ def mask_name(name):
     else:
         return name[0] + "*" * (len(name) - 2) + name[-1]
 
-# 글로벌 증시 데이터를 가져오는 함수
 @st.cache_data(ttl=900)
 def get_market_indices():
     indices = {"코스피": "^KS11", "코스닥": "^KQ11", "S&P 500": "^GSPC", "나스닥": "^IXIC"}
@@ -43,52 +43,45 @@ def load_data():
     
     df.columns = df.columns.str.replace(' ', '')
     df.columns = df.columns.str.strip()
-
+    
     if '총수익률(%)' in df.columns:
         df.rename(columns={'총수익률(%)': '수익률(%)'}, inplace=True)
     if '랩종류' in df.columns and '계좌명' not in df.columns:
         df.rename(columns={'랩종류': '계좌명'}, inplace=True)
-
+    
     if '고객명' in df.columns:
         df = df.dropna(subset=['고객명'])
         df = df[df['고객명'].str.strip() != '']
-
+        
     if '계좌명' not in df.columns:
         df['계좌명'] = '기본랩'
     else:
         df['계좌명'] = df['계좌명'].fillna('기본랩')
-
+    
     cols_to_clean = ['초기투자금', '추가투자금', '정산수익금', '누적수익금', '투자원금', '총투자금', '평가자산', '원금대비수익률(%)', '수익률(%)']
     for col in cols_to_clean:
         if col in df.columns:
             df[col] = df[col].astype(str).str.replace(r'[^\d.-]', '', regex=True)
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-    return df
-
-# --- 메인 화면 출력 ---
-st.title("📈 랩어카운트 수익 관리 대시보드")
-st.success("구글 스프레드시트와 실시간 연동 중입니다.")
-
-# 글로벌 증시 출력 
-st.subheader("🌐 실시간 글로벌 증시")
-market_data = get_market_indices()
-cols = st.columns(4)
-for i, (name, (price, change)) in enumerate(market_data.items()):
-    cols[i].metric(label=name, value=f"{price:,.2f}", delta=f"{change:.2f}%")
-
-st.markdown("---")
             
     return df
 
 st.title("📈 랩어카운트 수익 관리 대시보드")
 st.caption("※ 데이터 추가/수정은 구글 스프레드시트에서 진행하시면 1분 내로 이곳에 자동 반영됩니다.")
 
-# 여기서부터 try 문이 시작됩니다!
 try:
     df = load_data()
     
     if not df.empty:
         st.success("✅ 구글 스프레드시트와 실시간 연동 중입니다.")
+
+        # 글로벌 증시 출력 추가
+        st.subheader("🌐 실시간 글로벌 증시")
+        market_data = get_market_indices()
+        cols = st.columns(4)
+        for i, (name, (price, change)) in enumerate(market_data.items()):
+            cols[i].metric(label=name, value=f"{price:,.2f}", delta=f"{change:.2f}%")
+        st.markdown("---")
         
         client_list = df["고객명"].unique()
         tab_titles = ["🏆 랩 종류별 연도 평균"] + [mask_name(c) for c in client_list]
@@ -266,7 +259,6 @@ try:
     else:
         st.info("구글 스프레드시트에 아직 입력된 데이터가 없습니다.")
 
-# 🚨 이 아랫부분(except)이 잘려 나가서 에러가 났던 것입니다! 꼭 끝까지 복사해 주세요!
 except Exception as e:
     st.error("데이터를 불러오거나 계산하는 중 오류가 발생했습니다.")
     st.write("🔧 상세 에러:", e)
