@@ -5,7 +5,7 @@ import yfinance as yf
 
 st.set_page_config(layout="wide", page_title="랩어카운트 대시보드")
 
-# 💡 기삼님이 주신 진짜 완벽한 시트 아이디!
+# 💡 시트 아이디
 SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
 
 def mask_name(name):
@@ -68,7 +68,6 @@ def load_data():
             df[col] = df[col].astype(str).str.replace(r'[^\d.-]', '', regex=True)
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             
-    # 💡 툴팁 날짜 표기를 위해 날짜 컬럼을 완벽한 날짜 형식으로 변환
     if '날짜' in df.columns:
         df['날짜'] = pd.to_datetime(df['날짜'], errors='coerce')
             
@@ -123,7 +122,6 @@ try:
             st.header("🏆 가입 연도 및 랩 종류별 고객 평균 수익률")
             
             latest_df = df.sort_values('날짜').groupby(['고객명', '계좌명']).tail(1).copy()
-            # 💡 연도 추출 시 datetime 속성 사용하도록 수정
             latest_df['가입연도'] = latest_df['투자시작일'].astype(str).str.strip().str[:4] + "년"
             
             if '수익률(%)' in latest_df.columns and '원금대비수익률(%)' in latest_df.columns:
@@ -224,20 +222,20 @@ try:
                     
                     st.markdown("<br>", unsafe_allow_html=True)
                     
-                    # 💡 원금대비수익률 그래프 그리기
+                    # 💡 원금대비수익률 그래프
                     if "원금대비수익률(%)" in acc_df.columns:
                         fig1 = px.line(acc_df, x="날짜", y="원금대비수익률(%)", markers=True, 
                                       title=f"🟠 {safe_client_name} 고객님의 [{account}] 원금대비 수익률 추이",
                                       color_discrete_sequence=['#FF7F0E'])
                         
-                        # ✅ 마우스 오버(툴팁) 창 내용 변경 및 크기 확대
+                        # ✅ 에러 안 나는 큼지막한 툴팁 설정
                         fig1.update_traces(
                             line=dict(width=3), 
                             marker=dict(size=8),
-                            hovertemplate="<b>📅 날짜:</b> %{x|%Y-%m-%d}<br><b>📈 수익률:</b> %{y}%<extra></extra>"
+                            hovertemplate="<br> 📅 <b>날짜:</b> %{x|%Y-%m-%d} <br> 📈 <b>수익률:</b> %{y}% <br><extra></extra>"
                         )
                         fig1.update_layout(
-                            hoverlabel=dict(font_size=20, padding=dict(t=12, b=12, l=15, r=15))
+                            hoverlabel=dict(font_size=22) # 폰트를 22로 키워서 박스 전체를 크게 만듭니다
                         )
                         
                         if "정산수익금" in acc_df.columns:
@@ -248,24 +246,24 @@ try:
                                     mode="markers+text", marker=dict(color="red", size=16, symbol="star"),
                                     text=["<b>💰정산</b>"] * len(settlements), textposition="top center",
                                     textfont=dict(color="red", size=16), name="정산 발생 시점",
-                                    hoverinfo='skip' # 정산 아이콘에는 불필요한 툴팁 안 뜨게 숨김
+                                    hoverinfo='skip' 
                                 )
                         st.plotly_chart(fig1, use_container_width=True)
                         
-                    # 💡 총 수익률 그래프 그리기
+                    # 💡 총 수익률 그래프
                     if "수익률(%)" in acc_df.columns:
                         fig2 = px.line(acc_df, x="날짜", y="수익률(%)", markers=True, 
                                       title=f"🔵 {safe_client_name} 고객님의 [{account}] 총 수익률 추이",
                                       color_discrete_sequence=['#1F77B4'])
                         
-                        # ✅ 마우스 오버(툴팁) 창 내용 변경 및 크기 확대
+                        # ✅ 에러 안 나는 큼지막한 툴팁 설정
                         fig2.update_traces(
                             line=dict(width=3), 
                             marker=dict(size=8),
-                            hovertemplate="<b>📅 날짜:</b> %{x|%Y-%m-%d}<br><b>📈 수익률:</b> %{y}%<extra></extra>"
+                            hovertemplate="<br> 📅 <b>날짜:</b> %{x|%Y-%m-%d} <br> 📈 <b>수익률:</b> %{y}% <br><extra></extra>"
                         )
                         fig2.update_layout(
-                            hoverlabel=dict(font_size=20, padding=dict(t=12, b=12, l=15, r=15))
+                            hoverlabel=dict(font_size=22) # 폰트를 22로 키워서 박스 전체를 크게 만듭니다
                         )
                         
                         if "정산수익금" in acc_df.columns:
