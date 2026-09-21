@@ -5,7 +5,33 @@ import yfinance as yf
 
 st.set_page_config(layout="wide", page_title="랩어카운트 대시보드")
 
-# 💡 시트 아이디
+# ==========================================
+# 🔒 프라이빗 보안: 비밀번호 잠금 기능
+# ==========================================
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+
+if not st.session_state["authenticated"]:
+    st.markdown("<br><br><br>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.title("🔒 프라이빗 랩어카운트")
+        st.write("안전한 고객 데이터 관리를 위해 비밀번호를 입력해 주세요.")
+        
+        pwd = st.text_input("비밀번호", type="password")
+        if st.button("입장하기"):
+            if pwd == "0311":
+                st.session_state["authenticated"] = True
+                st.rerun()  # 로그인 성공 시 대시보드 화면으로 새로고침
+            else:
+                st.error("🚨 비밀번호가 틀렸습니다. 다시 확인해 주세요.")
+    
+    st.stop()  # 비밀번호를 맞추기 전까지는 아래의 대시보드 코드를 절대 실행하지 않고 멈춥니다!
+
+# ==========================================
+# 💡 여기서부터 메인 대시보드 코드 시작
+# ==========================================
 SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
 
 def mask_name(name):
@@ -115,9 +141,6 @@ try:
         tab_titles = ["🏆 랩 종류별 연도 평균"] + [mask_name(c) for c in client_list]
         tabs = st.tabs(tab_titles)
         
-        # ==========================================
-        # 1️⃣ 첫 번째 탭: 메인 요약 화면
-        # ==========================================
         with tabs[0]:
             st.header("🏆 가입 연도 및 랩 종류별 고객 평균 수익률")
             
@@ -176,9 +199,6 @@ try:
             else:
                 st.warning("⚠️ 구글 시트에 '수익률(%)' 또는 '원금대비수익률(%)' 항목이 없습니다.")
         
-        # ==========================================
-        # 2️⃣ 개별 고객 탭
-        # ==========================================
         for i, client in enumerate(client_list):
             with tabs[i+1]:
                 client_df = df[df["고객명"] == client].sort_values(by="날짜")
@@ -222,20 +242,18 @@ try:
                     
                     st.markdown("<br>", unsafe_allow_html=True)
                     
-                    # 💡 원금대비수익률 그래프
                     if "원금대비수익률(%)" in acc_df.columns:
                         fig1 = px.line(acc_df, x="날짜", y="원금대비수익률(%)", markers=True, 
                                       title=f"🟠 {safe_client_name} 고객님의 [{account}] 원금대비 수익률 추이",
                                       color_discrete_sequence=['#FF7F0E'])
                         
-                        # ✅ 에러 안 나는 큼지막한 툴팁 설정
                         fig1.update_traces(
                             line=dict(width=3), 
                             marker=dict(size=8),
                             hovertemplate="<br> 📅 <b>날짜:</b> %{x|%Y-%m-%d} <br> 📈 <b>수익률:</b> %{y}% <br><extra></extra>"
                         )
                         fig1.update_layout(
-                            hoverlabel=dict(font_size=22) # 폰트를 22로 키워서 박스 전체를 크게 만듭니다
+                            hoverlabel=dict(font_size=22)
                         )
                         
                         if "정산수익금" in acc_df.columns:
@@ -250,20 +268,18 @@ try:
                                 )
                         st.plotly_chart(fig1, use_container_width=True)
                         
-                    # 💡 총 수익률 그래프
                     if "수익률(%)" in acc_df.columns:
                         fig2 = px.line(acc_df, x="날짜", y="수익률(%)", markers=True, 
                                       title=f"🔵 {safe_client_name} 고객님의 [{account}] 총 수익률 추이",
                                       color_discrete_sequence=['#1F77B4'])
                         
-                        # ✅ 에러 안 나는 큼지막한 툴팁 설정
                         fig2.update_traces(
                             line=dict(width=3), 
                             marker=dict(size=8),
                             hovertemplate="<br> 📅 <b>날짜:</b> %{x|%Y-%m-%d} <br> 📈 <b>수익률:</b> %{y}% <br><extra></extra>"
                         )
                         fig2.update_layout(
-                            hoverlabel=dict(font_size=22) # 폰트를 22로 키워서 박스 전체를 크게 만듭니다
+                            hoverlabel=dict(font_size=22)
                         )
                         
                         if "정산수익금" in acc_df.columns:
