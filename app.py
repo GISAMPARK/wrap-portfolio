@@ -23,11 +23,11 @@ if not st.session_state["authenticated"]:
         if st.button("입장하기"):
             if pwd == "0311":
                 st.session_state["authenticated"] = True
-                st.rerun()  # 로그인 성공 시 대시보드 화면으로 새로고침
+                st.rerun()  
             else:
                 st.error("🚨 비밀번호가 틀렸습니다. 다시 확인해 주세요.")
     
-    st.stop()  # 비밀번호를 맞추기 전까지는 아래의 대시보드 코드를 절대 실행하지 않고 멈춥니다!
+    st.stop()  
 
 # ==========================================
 # 💡 여기서부터 메인 대시보드 코드 시작
@@ -111,7 +111,6 @@ try:
         st.markdown("---")
         market_data = get_market_indices()
         
-        # 🐻 곰돌이 날씨 표현
         sunny_bear = "<span style='font-size: 45px; vertical-align: middle;'>🐻☀️</span>"
         rainy_bear = "<span style='font-size: 45px; vertical-align: middle;'>🐻☔</span>"
 
@@ -141,8 +140,20 @@ try:
         tab_titles = ["🏆 랩 종류별 연도 평균"] + [mask_name(c) for c in client_list]
         tabs = st.tabs(tab_titles)
         
+        # ==========================================
+        # 1️⃣ 첫 번째 탭: 메인 요약 화면
+        # ==========================================
         with tabs[0]:
             st.header("🏆 가입 연도 및 랩 종류별 고객 평균 수익률")
+            
+            # ✅ 데이터 기준일 표시 추가 부분
+            if '날짜' in df.columns:
+                latest_date_val = df['날짜'].dropna().max()
+                if pd.notnull(latest_date_val):
+                    formatted_date = f"{latest_date_val.year}년 {latest_date_val.month}월 {latest_date_val.day}일"
+                    st.markdown(f"**📅 데이터 기준일:** {formatted_date}")
+            
+            st.markdown("<br>", unsafe_allow_html=True) # 살짝 간격 띄우기
             
             latest_df = df.sort_values('날짜').groupby(['고객명', '계좌명']).tail(1).copy()
             latest_df['가입연도'] = latest_df['투자시작일'].astype(str).str.strip().str[:4] + "년"
@@ -199,6 +210,9 @@ try:
             else:
                 st.warning("⚠️ 구글 시트에 '수익률(%)' 또는 '원금대비수익률(%)' 항목이 없습니다.")
         
+        # ==========================================
+        # 2️⃣ 개별 고객 탭
+        # ==========================================
         for i, client in enumerate(client_list):
             with tabs[i+1]:
                 client_df = df[df["고객명"] == client].sort_values(by="날짜")
