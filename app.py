@@ -146,14 +146,19 @@ try:
         with tabs[0]:
             st.header("🏆 가입 연도 및 랩 종류별 고객 평균 수익률")
             
-            # ✅ 데이터 기준일 표시 추가 부분
+            # ✅ 데이터 기준일 표시 크기 대폭 확대 및 디자인 개선
             if '날짜' in df.columns:
                 latest_date_val = df['날짜'].dropna().max()
                 if pd.notnull(latest_date_val):
                     formatted_date = f"{latest_date_val.year}년 {latest_date_val.month}월 {latest_date_val.day}일"
-                    st.markdown(f"**📅 데이터 기준일:** {formatted_date}")
-            
-            st.markdown("<br>", unsafe_allow_html=True) # 살짝 간격 띄우기
+                    
+                    # 💡 font-size: 24px 로 글자를 큼직하게 키웠습니다. 더 키우려면 28px, 30px 등으로 수정하시면 됩니다!
+                    st.markdown(
+                        f"<div style='font-size: 24px; font-weight: bold; margin-top: 10px; margin-bottom: 20px;'>"
+                        f"📅 데이터 기준일: <span style='color: #1F77B4;'>{formatted_date}</span>"
+                        f"</div>", 
+                        unsafe_allow_html=True
+                    )
             
             latest_df = df.sort_values('날짜').groupby(['고객명', '계좌명']).tail(1).copy()
             latest_df['가입연도'] = latest_df['투자시작일'].astype(str).str.strip().str[:4] + "년"
