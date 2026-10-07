@@ -88,7 +88,6 @@ def load_data():
     else:
         df['계좌명'] = df['계좌명'].fillna('기본투자')
         
-    # 💡 데이터 내부의 '랩'이라는 단어를 모두 '투자'로 자동 변환 (미국랩 -> 미국투자)
     df['계좌명'] = df['계좌명'].astype(str).str.replace('랩', '투자')
     
     cols_to_clean = ['초기투자금', '추가투자금', '정산수익금', '누적수익금', '투자원금', '총투자금', '평가자산', '원금대비수익률(%)', '수익률(%)']
@@ -147,12 +146,18 @@ try:
         # 1️⃣ 첫 번째 탭: 메인 요약 화면
         # ==========================================
         with tabs[0]:
-            # 💡 제목 변경 적용 완료!
             st.header("🏆 가입 연도 및 투자 종류에 따른 고객 평균 수익률")
             st.markdown("<br>", unsafe_allow_html=True)
             
             latest_df = df.sort_values('날짜').groupby(['고객명', '계좌명']).tail(1).copy()
             latest_df['가입연도'] = latest_df['투자시작일'].astype(str).str.strip().str[:4] + "년"
+            
+            # ✅ [핵심 기능] 해지/종료 고객 자동 필터링 로직
+            if '날짜' in df.columns:
+                global_max_date = df['날짜'].dropna().max()
+                if pd.notnull(global_max_date):
+                    # 고객의 마지막 업데이트 날짜가 최신 기준일보다 30일 이상 차이나면 운용 종료로 판단하고 평균에서 제외
+                    latest_df = latest_df[(global_max_date - latest_df['날짜']).dt.days <= 30]
             
             if '수익률(%)' in latest_df.columns and '원금대비수익률(%)' in latest_df.columns:
                 yearly_avg = latest_df.groupby(['가입연도', '계좌명'])[['원금대비수익률(%)', '수익률(%)']].mean().reset_index()
@@ -173,22 +178,20 @@ try:
                         
                         with cols[idx]:
                             if avg_prin >= 100:
-                                st.success(f"**{year} 가입자 평균**\n\n👉 **{simul_prin:,.0f}원** ({avg_prin}%) 📈")
+                                st.success(f"**{year} 현재 운용자 평균**\n\n👉 **{simul_prin:,.0f}원** ({avg_prin}%) 📈")
                             else:
-                                st.warning(f"**{year} 가입자 평균**\n\n👉 **{simul_prin:,.0f}원** ({avg_prin}%) 📉")
+                                st.warning(f"**{year} 현재 운용자 평균**\n\n👉 **{simul_prin:,.0f}원** ({avg_prin}%) 📉")
                     
                     st.markdown("<br>", unsafe_allow_html=True)
                     
-                    if '날짜' in df.columns:
-                        latest_date_val = df['날짜'].dropna().max()
-                        if pd.notnull(latest_date_val):
-                            formatted_date = f"{latest_date_val.year}년 {latest_date_val.month}월 {latest_date_val.day}일"
-                            st.markdown(
-                                f"<div style='font-size: 18px; font-weight: bold; margin-bottom: 8px;'>"
-                                f"📅 기준일: <span style='color: #1F77B4;'>{formatted_date}</span>"
-                                f"</div>", 
-                                unsafe_allow_html=True
-                            )
+                    if '날짜' in df.columns and pd.notnull(global_max_date):
+                        formatted_date = f"{global_max_date.year}년 {global_max_date.month}월 {global_max_date.day}일"
+                        st.markdown(
+                            f"<div style='font-size: 18px; font-weight: bold; margin-bottom: 8px;'>"
+                            f"📅 기준일: <span style='color: #1F77B4;'>{formatted_date}</span>"
+                            f"</div>", 
+                            unsafe_allow_html=True
+                        )
                     
                     acc_data_melted = acc_data.melt(id_vars=['가입연도'], value_vars=['원금대비수익률(%)', '수익률(%)'], 
                                                     var_name='수익률 종류', value_name='평균(%)')
@@ -228,7 +231,15 @@ try:
                 safe_client_name = mask_name(client)
                 
                 c_start = client_df["투자시작일"].iloc[0] if "투자시작일" in client_df.columns else "정보없음"
-                st.info(f"👤 **{safe_client_name}** 고객님 | 📅 최초 투자 시작일: **{c_start}** | 📂 보유 계좌: **{len(account_list)}개**")
+                
+                # 고객의 마지막 데이터가 30일 이상 지났으면 '운용 종료' 라벨 띄우기
+                client_max_date = client_df['날짜'].max()
+                status_badge = ""
+                if '날짜' in df.columns and pd.notnull(global_max_date) and pd.notnull(client_max_date):
+                    if (global_max_date - client_max_date).days > 30:
+                        status_badge = " 🛑 [운용 종료/해지]"
+
+                st.info(f"👤 **{safe_client_name}** 고객님{status_badge} | 📅 최초 투자 시작일: **{c_start}** | 📂 보유 계좌: **{len(account_list)}개**")
                 
                 for acc_idx, account in enumerate(account_list):
                     st.markdown(f"### 📊 [{account}] 운용 현황")
