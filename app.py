@@ -152,11 +152,9 @@ try:
             latest_df = df.sort_values('날짜').groupby(['고객명', '계좌명']).tail(1).copy()
             latest_df['가입연도'] = latest_df['투자시작일'].astype(str).str.strip().str[:4] + "년"
             
-            # ✅ [핵심 기능] 해지/종료 고객 자동 필터링 로직
             if '날짜' in df.columns:
                 global_max_date = df['날짜'].dropna().max()
                 if pd.notnull(global_max_date):
-                    # 고객의 마지막 업데이트 날짜가 최신 기준일보다 30일 이상 차이나면 운용 종료로 판단하고 평균에서 제외
                     latest_df = latest_df[(global_max_date - latest_df['날짜']).dt.days <= 30]
             
             if '수익률(%)' in latest_df.columns and '원금대비수익률(%)' in latest_df.columns:
@@ -232,7 +230,6 @@ try:
                 
                 c_start = client_df["투자시작일"].iloc[0] if "투자시작일" in client_df.columns else "정보없음"
                 
-                # 고객의 마지막 데이터가 30일 이상 지났으면 '운용 종료' 라벨 띄우기
                 client_max_date = client_df['날짜'].max()
                 status_badge = ""
                 if '날짜' in df.columns and pd.notnull(global_max_date) and pd.notnull(client_max_date):
@@ -259,7 +256,8 @@ try:
                     st.markdown("##### 2️⃣ 정산 및 운용 자금")
                     col4, col5, col_empty = st.columns(3)
                     if "누적수익금" in acc_df.columns:
-                        col4.metric("💰 총 누적(정산)수익금", f"{latest_data['누적수익금']:,.0f}원")
+                        # 💡 '총 누적(정산)수익금' -> '총 누적수익금' 명칭 변경
+                        col4.metric("💰 총 누적수익금", f"{latest_data['누적수익금']:,.0f}원")
                     if "총투자금" in acc_df.columns:
                         col5.metric("🏦 총투자금", f"{latest_data['총투자금']:,.0f}원")
                         
@@ -274,6 +272,24 @@ try:
                     
                     st.markdown("<br>", unsafe_allow_html=True)
                     
+                    # ✅ 연차별 정산 내역 토글(Expander) 박스 추가
+                    if "정산수익금" in acc_df.columns:
+                        settlements = acc_df[acc_df["정산수익금"] > 0].copy()
+                        if not settlements.empty:
+                            with st.expander("🧾 과거 정산 내역 상세 보기", expanded=False):
+                                for _, row in settlements.iterrows():
+                                    current_date = row['날짜']
+                                    if c_start != "정보없음":
+                                        start_date = pd.to_datetime(c_start)
+                                        years_passed = current_date.year - start_date.year + 1
+                                        year_label = f"**{years_passed}년차 정산**"
+                                    else:
+                                        year_label = "**정산 내역**"
+                                        
+                                    st.markdown(f"- {year_label} ({current_date.strftime('%Y년 %m월 %d일')}): <span style='color:#CD2E3A; font-weight:bold;'>{row['정산수익금']:,.0f}원</span>", unsafe_allow_html=True)
+                    
+                    st.markdown("<br>", unsafe_allow_html=True)
+
                     if "원금대비수익률(%)" in acc_df.columns:
                         fig1 = px.line(acc_df, x="날짜", y="원금대비수익률(%)", markers=True, 
                                       title=f"🟠 {safe_client_name} 고객님의 [{account}] 원금대비 수익률 추이",
