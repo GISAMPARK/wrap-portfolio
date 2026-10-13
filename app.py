@@ -30,9 +30,13 @@ if not st.session_state["authenticated"]:
     st.stop()  
 
 # ==========================================
-# 💡 여기서부터 메인 대시보드 코드 시작
+# 💡 메인 대시보드 데이터 연동 설정
 # ==========================================
 SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
+
+# 👇👇 [중요] 여기에 본사 대표계좌 시트의 GID 숫자를 입력해주세요! 👇👇
+REP_SHEET_GID = "" 
+# 👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆
 
 def mask_name(name):
     name = str(name).strip()
@@ -65,6 +69,23 @@ def get_market_indices():
         except Exception:
             data[name] = (0, 0)
     return data
+
+@st.cache_data(ttl=60)
+def load_rep_data():
+    if not REP_SHEET_GID:
+        return pd.DataFrame()
+    
+    url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={REP_SHEET_GID}"
+    try:
+        df = pd.read_csv(url)
+        df.columns = df.columns.str.strip().str.replace('\n', '')
+        for col in df.columns:
+            if col != '상품명':
+                df[col] = df[col].astype(str).str.replace(r'[^\d.-]', '', regex=True)
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+        return df
+    except Exception:
+        return pd.DataFrame()
 
 @st.cache_data(ttl=60)
 def load_data():
@@ -106,6 +127,7 @@ st.caption("※ 데이터 추가/수정은 구글 스프레드시트에서 진�
 
 try:
     df = load_data()
+    rep_df = load_rep_data()
     
     if not df.empty:
         st.success("✅ 구글 스프레드시트와 실시간 연동 중입니다.")
@@ -138,8 +160,8 @@ try:
             
         st.markdown("---")
         
-        client_list = df["고객명"].unique()
-        tab_titles = ["🏆 투자 종류별 연도 평균"] + [mask_name(c) for c in client_list]
+        # 💡 기존의 바글바글하던 고객 탭들을 단 3개의 깔끔한 탭으로 정리했습니다!
+        tab_titles = ["🏆 전체 요약 (투자 종류별)", "🏢 본사 대표 운용성과", "🔍 고객 개별 포트폴리오 검색"]
         tabs = st.tabs(tab_titles)
         
         # ==========================================
@@ -217,22 +239,72 @@ try:
                     st.markdown("<hr style='border: 2px dashed #bbb;'><br>", unsafe_allow_html=True)
             else:
                 st.warning("⚠️ 구글 시트에 '수익률(%)' 또는 '원금대비수익률(%)' 항목이 없습니다.")
+                
+        # ==========================================
+        # 2️⃣ 두 번째 탭: 본사 대표 운용성과
+        # ==========================================
+        with tabs[1]:
+            st.header("🏢 본사 대표계좌 운용성과 (매주 업데이트)")
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            if rep_df.empty:
+                st.info("💡 구글 스프레드시트에 새 탭을 만들고 데이터를 입력한 뒤, `app.py` 코드 상단의 `REP_SHEET_GID`에 숫자를 입력해주세요!")
+            else:
+                st.markdown("##### 📊 대표 상품 및 지수 수익률 요약표")
+                st.dataframe(rep_df, use_container_width=True)
+                
+                y1_cols = [c for c in rep_df.columns if '1Y' in c.upper()]
+                if y1_cols and '상품명' in rep_df.columns:
+                    y1_col = y1_cols[0]
+                    st.markdown("<hr style='border: 2px dashed #bbb;'><br>", unsafe_allow_html=True)
+                    st.markdown(f"##### 📈 주요 상품 {y1_col} 비교 (시장 지수 대비 성과)")
+                    
+                    plot_df = rep_df.dropna(subset=[y1_col]).sort_values(by=y1_col, ascending=False)
+                    
+                    fig_rep = px.bar(plot_df, x='상품명', y=y1_col, text=y1_col, 
+                                     color=y1_col, color_continuous_scale=px.colors.diverging.RdYlBu[::-1])
+                    fig_rep.update_traces(texttemplate='<b>%{text}%</b>', textposition='outside')
+                    
+                    y_max_rep = plot_df[y1_col].max()
+                    y_min_rep = plot_df[y1_col].min()
+                    fig_rep.update_layout(yaxis=dict(range=[min(0, y_min_rep * 1.2), y_max_rep * 1.2]), yaxis_title="수익률(%)", xaxis_title="")
+                    st.plotly_chart(fig_rep, use_container_width=True)
         
         # ==========================================
-        # 2️⃣ 개별 고객 탭
+        # 3️⃣ 세 번째 탭: 고객 검색창 (Search Bar) - 신규 기능!
         # ==========================================
-        for i, client in enumerate(client_list):
-            with tabs[i+1]:
+        with tabs[2]:
+            st.header("🔍 개별 고객 포트폴리오 검색")
+            st.write("아래 검색창을 클릭하여 고객님의 이름을 직접 입력하거나 선택해 주세요.")
+            
+            client_list = sorted(df["고객명"].unique()) # 가나다 순 정렬
+            
+            # 검색창 만들기
+            selected_client = st.selectbox(
+                "👤 고객명 검색:", 
+                ["--- 고객을 선택하세요 ---"] + client_list,
+                help="이름을 타이핑하면 빠르게 찾을 수 있습니다."
+            )
+            
+            st.markdown("<hr style='border: 1px solid #ddd;'>", unsafe_allow_html=True)
+            
+            # 고객을 선택했을 때만 아래의 데이터가 나타납니다.
+            if selected_client != "--- 고객을 선택하세요 ---":
+                client = selected_client
                 client_df = df[df["고객명"] == client].sort_values(by="날짜")
                 account_list = client_df['계좌명'].unique()
                 
                 safe_client_name = mask_name(client)
-                
                 c_start = client_df["투자시작일"].iloc[0] if "투자시작일" in client_df.columns else "정보없음"
                 
+                if '날짜' in df.columns:
+                    global_max_date = df['날짜'].dropna().max()
+                else:
+                    global_max_date = pd.NaT
+
                 client_max_date = client_df['날짜'].max()
                 status_badge = ""
-                if '날짜' in df.columns and pd.notnull(global_max_date) and pd.notnull(client_max_date):
+                if pd.notnull(global_max_date) and pd.notnull(client_max_date):
                     if (global_max_date - client_max_date).days > 30:
                         status_badge = " 🛑 [운용 종료/해지]"
 
@@ -256,7 +328,6 @@ try:
                     st.markdown("##### 2️⃣ 정산 및 운용 자금")
                     col4, col5, col_empty = st.columns(3)
                     if "누적수익금" in acc_df.columns:
-                        # 💡 '총 누적(정산)수익금' -> '총 누적수익금' 명칭 변경
                         col4.metric("💰 총 누적수익금", f"{latest_data['누적수익금']:,.0f}원")
                     if "총투자금" in acc_df.columns:
                         col5.metric("🏦 총투자금", f"{latest_data['총투자금']:,.0f}원")
@@ -272,7 +343,6 @@ try:
                     
                     st.markdown("<br>", unsafe_allow_html=True)
                     
-                    # ✅ 연차별 정산 내역 토글(Expander) 박스 추가
                     if "정산수익금" in acc_df.columns:
                         settlements = acc_df[acc_df["정산수익금"] > 0].copy()
                         if not settlements.empty:
@@ -300,9 +370,7 @@ try:
                             marker=dict(size=8),
                             hovertemplate="<br> 📅 <b>날짜:</b> %{x|%Y-%m-%d} <br> 📈 <b>수익률:</b> %{y}% <br><extra></extra>"
                         )
-                        fig1.update_layout(
-                            hoverlabel=dict(font_size=22)
-                        )
+                        fig1.update_layout(hoverlabel=dict(font_size=22))
                         
                         if "정산수익금" in acc_df.columns:
                             settlements = acc_df[acc_df["정산수익금"] != 0]
@@ -326,9 +394,7 @@ try:
                             marker=dict(size=8),
                             hovertemplate="<br> 📅 <b>날짜:</b> %{x|%Y-%m-%d} <br> 📈 <b>수익률:</b> %{y}% <br><extra></extra>"
                         )
-                        fig2.update_layout(
-                            hoverlabel=dict(font_size=22)
-                        )
+                        fig2.update_layout(hoverlabel=dict(font_size=22))
                         
                         if "정산수익금" in acc_df.columns:
                             settlements = acc_df[acc_df["정산수익금"] != 0]
@@ -369,6 +435,9 @@ try:
                     
                     if acc_idx < len(account_list) - 1:
                         st.markdown("<hr style='border: 2px dashed #bbb; margin-top: 30px; margin-bottom: 30px;'>", unsafe_allow_html=True)
+            else:
+                # 검색창에서 고객을 아직 선택하지 않았을 때 나오는 기본 안내 메시지
+                st.info("👆 위 검색창을 클릭하여 조회할 고객을 선택해 주세요.")
                         
     else:
         st.info("구글 스프레드시트에 아직 입력된 데이터가 없습니다.")
