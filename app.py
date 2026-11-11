@@ -28,9 +28,12 @@ if not st.session_state["authenticated"]:
     st.stop()  
 
 # ==========================================
-# 💡 데이터 연동 설정
+# 💡 데이터 연동 설정 (모든 GID 하드코딩 완료 - 탭 순서 변경해도 절대 안 깨짐!)
 # ==========================================
 SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
+
+# 👇 랩어카운트 고유 GID 추가 완료! 👇
+RAP_SHEET_GID = "1303130540" 
 REP_SHEET_GID = "1430586087" 
 PENSION_SHEET_GID = "951679806" 
 STOCK_SHEET_GID = "1558094314" 
@@ -68,10 +71,8 @@ def load_rep_data():
         df = pd.read_csv(url, on_bad_lines='skip')
         if df.empty or (len(df.columns) > 0 and '<html' in str(df.columns[0]).lower()): return pd.DataFrame()
         
-        # 컬럼 이름 깔끔하게 정리 (에러 방지용 리스트 내포)
         df.columns = [str(c).replace('\n', '').strip() for c in df.columns]
         
-        # 💡 피드백 완벽 해결: 이상한 글자(오타), 1M, 숫자 등을 '상품명'에서 철저하게 걸러냅니다!
         if '상품명' in df.columns:
             df['상품명'] = df['상품명'].apply(lambda x: str(x).strip())
             def is_valid(name):
@@ -79,7 +80,7 @@ def load_rep_data():
                 if name in ['1M', '3M', '6M', '1Y', '(단위:억원)', '수익률', '상품명', '기준일', 'nan', 'None']: return False
                 try:
                     float(name.replace(',', ''))
-                    return False # 숫자로만 된 것도 가짜 상품명이므로 제거!
+                    return False
                 except:
                     return True
             df = df[df['상품명'].apply(is_valid)]
@@ -97,7 +98,8 @@ def load_rep_data():
 
 @st.cache_data(ttl=60)
 def load_rap_data():
-    url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
+    # 👇 이제 첫번째 탭이 아닌 무조건 '랩어카운트' 탭만 가져옵니다!
+    url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={RAP_SHEET_GID}"
     try:
         df = pd.read_csv(url, on_bad_lines='skip')
         if df.empty or (len(df.columns) > 0 and '<html' in str(df.columns[0]).lower()): return pd.DataFrame()
@@ -198,10 +200,6 @@ df_rap = load_rap_data()
 df_pen = load_pension_data()
 df_stock = load_stock_data()
 rep_df = load_rep_data()
-
-# 구글 시트 권한 막힘 경고 알림창
-if df_rap.empty and df_pen.empty and df_stock.empty:
-    st.error("🚨 데이터를 불러올 수 없습니다! 구글 시트가 새 폴더로 이동되면서 **'공유 권한'**이 잠긴 것 같습니다. 구글 시트 우측 상단 [공유] 버튼을 눌러 **'링크가 있는 모든 사용자(뷰어)'**로 다시 변경해 주세요!")
 
 st.markdown("---")
 market_data = get_market_indices()
@@ -525,7 +523,6 @@ with tabs[2]:
             latest_date_str = latest_date.strftime('%Y년 %m월 %d일') if isinstance(latest_date, pd.Timestamp) else str(latest_date)
             st.markdown(f"#### 📅 최근 업데이트 기준일: **{latest_date_str}**")
             
-            # 💡 피드백 1: 드래그 없이 표를 한눈에 볼 수 있도록 자동 높이 쫙 펴주기!
             latest_df = clean_rep_df[clean_rep_df['기준일'] == latest_date].copy()
             display_df = latest_df.copy()
             display_df['기준일'] = display_df['기준일'].dt.strftime('%Y-%m-%d') if pd.api.types.is_datetime64_any_dtype(display_df['기준일']) else display_df['기준일']
@@ -535,22 +532,23 @@ with tabs[2]:
             
             st.markdown("<br>", unsafe_allow_html=True)
             
-            # 💡 피드백 2: 선택 박스 다 없애고 기본 선 그래프 높이를 2배(900px)로 엄청나게 키웠습니다!
             st.markdown("#### 📈 과거부터 현재까지 1Y 수익률 추이")
             
             if len(clean_rep_df['기준일'].unique()) > 1:
                 trend_df = clean_rep_df.dropna(subset=['1Y']).sort_values('기준일')
                 
                 fig_trend = px.line(trend_df, x='기준일', y='1Y', color='상품명', markers=True)
-                fig_trend.update_xaxes(tickformat="%y년 %m월 %d일", title="업데이트 기준일")
+                
+                # 💡 피드백 1 완벽 해결: 하단 X축 '업데이트 기준일' 타이틀 삭제 & 선 굵기 2배 굵게!
+                fig_trend.update_xaxes(title=None, tickformat="%y년 %m월 %d일")
                 fig_trend.update_yaxes(title="1Y 수익률(%)")
                 
                 fig_trend.update_traces(
+                    line=dict(width=4), # 기본 선 굵기를 아주 두껍게 변경하여 한눈에 잘 보입니다!
                     hovertemplate="<b><span style='font-size:16px;'>%{x|%Y년 %m월 %d일}</span></b><br>" +
                                   "<b><span style='font-size:20px; color:#1F77B4;'>수익률: %{y:.2f}%</span></b><extra></extra>"
                 )
                 
-                # 💡 핵심: 그래프 높이를 900으로 크게 설정하여 선들이 안 뭉치게 쫙 펴줍니다!
                 fig_trend.update_layout(height=900, hoverlabel=dict(font=dict(size=18)))
                 st.plotly_chart(fig_trend, use_container_width=True)
             else:
