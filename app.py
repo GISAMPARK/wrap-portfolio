@@ -341,7 +341,8 @@ with tabs[0]:
             merged['수익률(%)'] = merged['수익률(%)'].fillna(0)
             
             fig_trend = px.area(merged, x='날짜', y='총자산_평가', title="날짜별 금융자산 합산 우상향 지표", color_discrete_sequence=['#CD2E3A'])
-            # 💡 피드백 2번 수정: 마우스 오버 팝업 크기 및 내용 개선
+            
+            # 오류를 일으킨 옵션은 제거하고, hover 텍스트 안에서 직접 글씨 크기를 키웠습니다.
             fig_trend.update_traces(
                 mode='lines+markers', 
                 marker=dict(size=6),
@@ -350,7 +351,8 @@ with tabs[0]:
                               "<b><span style='font-size:22px; color:#1F77B4;'>📈 총 수익률: %{customdata[0]:.2f}%</span></b><extra></extra>",
                 customdata=merged[['수익률(%)']]
             )
-            fig_trend.update_layout(hoverlabel=dict(font_size=20, padding=dict(t=20, b=20, l=20, r=20)))
+            # 깔끔하게 폰트 사이즈만 적용하는 올바른 옵션으로 변경
+            fig_trend.update_layout(hoverlabel=dict(font=dict(size=18)))
             fig_trend.update_xaxes(tickformat="%y년 %m월", dtick="M1") 
             fig_trend.update_yaxes(title="총자산")
             st.plotly_chart(fig_trend, use_container_width=True)
@@ -384,7 +386,6 @@ with tabs[0]:
                         color = '#888888' if status == '해지' else '#FF7F0E'
                         fig1 = px.line(acc_df, x="날짜", y="원금대비수익률(%)", markers=True, title=f"🟠 {acc} 수익률 추이")
                         fig1.update_traces(line=dict(width=3, color=color))
-                        # 💡 피드백 1번 수정: x축 한글화
                         fig1.update_xaxes(tickformat="%y년 %m월", dtick="M1")
                         st.plotly_chart(fig1, use_container_width=True)
                     st.markdown("<hr style='border: 1px dashed #ddd;'>", unsafe_allow_html=True)
@@ -404,7 +405,6 @@ with tabs[0]:
                     if "수익률(%)" in acc_df.columns:
                         fig2 = px.line(acc_df, x="날짜", y="수익률(%)", markers=True, title=f"🟢 {acc} 총 수익률 추이")
                         fig2.update_traces(line=dict(width=3, color='#2CA02C'))
-                        # 💡 피드백 1번 수정: x축 한글화
                         fig2.update_xaxes(tickformat="%y년 %m월", dtick="M1")
                         st.plotly_chart(fig2, use_container_width=True)
                         
@@ -431,7 +431,6 @@ with tabs[0]:
                     if "수익률(%)" in acc_df.columns:
                         fig3 = px.line(acc_df, x="날짜", y="수익률(%)", markers=True, title=f"🔵 {acc} 총 수익률 추이")
                         fig3.update_traces(line=dict(width=3, color='#1F77B4'))
-                        # 💡 피드백 1번 수정: x축 한글화
                         fig3.update_xaxes(tickformat="%y년 %m월", dtick="M1")
                         st.plotly_chart(fig3, use_container_width=True)
                         
