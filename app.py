@@ -28,7 +28,7 @@ if not st.session_state["authenticated"]:
     st.stop()  
 
 # ==========================================
-# 💡 데이터 연동 설정
+# 💡 데이터 연동 설정 (탭 고유 GID 완벽 고정)
 # ==========================================
 SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
 
@@ -59,12 +59,16 @@ def get_market_indices():
             data[name] = (0, 0)
     return data
 
+# ==========================================
+# 🛡️ 튕김 방지 처리 완료된 데이터 로드 함수들
+# ==========================================
 @st.cache_data(ttl=60)
 def load_rep_data():
     if not REP_SHEET_GID: return pd.DataFrame()
-    url = f"[https://docs.google.com/spreadsheets/d/](https://docs.google.com/spreadsheets/d/){SHEET_ID}/export?format=csv&gid={REP_SHEET_GID}"
+    url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={REP_SHEET_GID}"
     try:
-        df = pd.read_csv(url, on_bad_lines='skip')
+        # 💡 에러 원인이던 on_bad_lines 옵션을 완벽히 제거했습니다!
+        df = pd.read_csv(url)
         if df.empty or (len(df.columns) > 0 and '<html' in str(df.columns[0]).lower()): return pd.DataFrame()
         
         df.columns = [str(c).replace('\n', '').strip() for c in df.columns]
@@ -94,9 +98,9 @@ def load_rep_data():
 
 @st.cache_data(ttl=60)
 def load_rap_data():
-    url = f"[https://docs.google.com/spreadsheets/d/](https://docs.google.com/spreadsheets/d/){SHEET_ID}/export?format=csv&gid={RAP_SHEET_GID}"
+    url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={RAP_SHEET_GID}"
     try:
-        df = pd.read_csv(url, on_bad_lines='skip')
+        df = pd.read_csv(url)
         if df.empty or (len(df.columns) > 0 and '<html' in str(df.columns[0]).lower()): return pd.DataFrame()
         
         df.columns = [str(c).replace(' ', '').strip() for c in df.columns]
@@ -126,9 +130,9 @@ def load_rap_data():
 @st.cache_data(ttl=60)
 def load_pension_data():
     if not PENSION_SHEET_GID: return pd.DataFrame()
-    url = f"[https://docs.google.com/spreadsheets/d/](https://docs.google.com/spreadsheets/d/){SHEET_ID}/export?format=csv&gid={PENSION_SHEET_GID}"
+    url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={PENSION_SHEET_GID}"
     try:
-        df = pd.read_csv(url, on_bad_lines='skip')
+        df = pd.read_csv(url)
         if df.empty or (len(df.columns) > 0 and '<html' in str(df.columns[0]).lower()): return pd.DataFrame()
         
         df.columns = [str(c).replace(' ', '').strip() for c in df.columns]
@@ -156,9 +160,9 @@ def load_pension_data():
 @st.cache_data(ttl=60)
 def load_stock_data():
     if not STOCK_SHEET_GID: return pd.DataFrame()
-    url = f"[https://docs.google.com/spreadsheets/d/](https://docs.google.com/spreadsheets/d/){SHEET_ID}/export?format=csv&gid={STOCK_SHEET_GID}"
+    url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={STOCK_SHEET_GID}"
     try:
-        df = pd.read_csv(url, on_bad_lines='skip')
+        df = pd.read_csv(url)
         if df.empty or (len(df.columns) > 0 and '<html' in str(df.columns[0]).lower()): return pd.DataFrame()
         
         df.columns = [str(c).replace(' ', '').strip() for c in df.columns]
@@ -197,7 +201,7 @@ df_stock = load_stock_data()
 rep_df = load_rep_data()
 
 if df_rap.empty and df_pen.empty and df_stock.empty:
-    st.error("🚨 데이터를 불러올 수 없습니다! 구글 시트가 새 폴더로 이동되면서 **'공유 권한'**이 잠긴 것 같습니다. 구글 시트 우측 상단 [공유] 버튼을 눌러 **'링크가 있는 모든 사용자(뷰어)'**로 다시 변경해 주세요!")
+    st.error("🚨 데이터를 불러올 수 없습니다! 구글 시트 내부에 예상치 못한 기호나 줄이 포함되어 서버 에러가 발생했거나 권한이 막혀있습니다.")
 
 st.markdown("---")
 market_data = get_market_indices()
@@ -316,14 +320,11 @@ with tabs[0]:
         
         with col_chart:
             if not pie_data.empty:
-                # 💡 피드백 2번 완벽 해결: 자산이 1개일 때는 글씨가 짤리지 않게 'inside'로, 2개 이상일 때는 예쁘게 밖으로!
                 current_textposition = 'inside' if len(pie_data) == 1 else 'outside'
                 
                 fig_pie = px.pie(pie_data, values='금액', names='자산 구분', hole=0.5,
                                  color='자산 구분', color_discrete_map={'투자자산(랩)':'#1F77B4', '노후자산(연금)':'#2CA02C', '노후자산(IRP)':'#98DF8A', '위탁자산(주식)':'#FF7F0E'})
                 fig_pie.update_traces(textposition=current_textposition, textinfo='label+percent', textfont_size=15, pull=[0.02]*len(pie_data))
-                
-                # 마진(여백)을 조금 더 늘려서 짤림 방지 강화
                 fig_pie.update_layout(showlegend=False, margin=dict(t=40, b=40, l=40, r=40), height=400)
                 st.plotly_chart(fig_pie, use_container_width=True)
                 
@@ -524,7 +525,6 @@ with tabs[2]:
         if not clean_rep_df.empty:
             latest_date = clean_rep_df['기준일'].max()
             latest_date_str = latest_date.strftime('%Y년 %m월 %d일') if isinstance(latest_date, pd.Timestamp) else str(latest_date)
-            # 하단 중복 텍스트 삭제 및 깔끔하게 정리
             st.markdown(f"#### 📅 최근 업데이트 기준일: **{latest_date_str}**")
             
             latest_df = clean_rep_df[clean_rep_df['기준일'] == latest_date].copy()
@@ -545,7 +545,6 @@ with tabs[2]:
                 fig_trend.update_xaxes(title=None, tickformat="%y년 %m월 %d일")
                 fig_trend.update_yaxes(title="1Y 수익률(%)")
                 
-                # 모든 선 굵기 4배(기본1->4)로 통일 & 마우스 오버 정보 깔끔하게!
                 fig_trend.update_traces(
                     line=dict(width=4), 
                     hovertemplate="<b><span style='font-size:16px;'>%{x|%Y년 %m월 %d일}</span></b><br>" +
