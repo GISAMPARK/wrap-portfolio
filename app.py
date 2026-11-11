@@ -31,7 +31,9 @@ if not st.session_state["authenticated"]:
 # 💡 데이터 연동 설정
 # ==========================================
 SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
-REP_SHEET_GID = "" 
+
+# 👇 사진에서 찾아낸 본사대표계좌 탭의 GID 적용 완료! 👇
+REP_SHEET_GID = "1430586087" 
 PENSION_SHEET_GID = "951679806" 
 STOCK_SHEET_GID = "1558094314" 
 
@@ -65,7 +67,7 @@ def load_rep_data():
         df = pd.read_csv(url)
         df.columns = df.columns.str.strip().str.replace('\n', '')
         for col in df.columns:
-            if col != '상품명':
+            if col not in ['상품명', '기준일']:
                 df[col] = df[col].astype(str).str.replace(r'[^\d.-]', '', regex=True)
                 df[col] = pd.to_numeric(df[col], errors='coerce')
         return df
@@ -341,8 +343,6 @@ with tabs[0]:
             merged['수익률(%)'] = merged['수익률(%)'].fillna(0)
             
             fig_trend = px.area(merged, x='날짜', y='총자산_평가', title="날짜별 금융자산 합산 우상향 지표", color_discrete_sequence=['#CD2E3A'])
-            
-            # 오류를 일으킨 옵션은 제거하고, hover 텍스트 안에서 직접 글씨 크기를 키웠습니다.
             fig_trend.update_traces(
                 mode='lines+markers', 
                 marker=dict(size=6),
@@ -351,7 +351,6 @@ with tabs[0]:
                               "<b><span style='font-size:22px; color:#1F77B4;'>📈 총 수익률: %{customdata[0]:.2f}%</span></b><extra></extra>",
                 customdata=merged[['수익률(%)']]
             )
-            # 깔끔하게 폰트 사이즈만 적용하는 올바른 옵션으로 변경
             fig_trend.update_layout(hoverlabel=dict(font=dict(size=18)))
             fig_trend.update_xaxes(tickformat="%y년 %m월", dtick="M1") 
             fig_trend.update_yaxes(title="총자산")
@@ -460,4 +459,22 @@ with tabs[1]:
 # ==========================================
 with tabs[2]:
     st.header("🏢 본사 대표계좌 운용성과")
-    st.info("💡 본사 운용 성과 이미지를 채팅창에 올려주시면, 제가 엑셀 표로 바로 뽑아드리고 연동해 드리겠습니다!")
+    if not rep_df.empty and '기준일' in rep_df.columns:
+        latest_date = rep_df['기준일'].dropna().max()
+        st.markdown(f"#### 📅 최근 업데이트 기준일: {latest_date}")
+        
+        # 최신 기준일 데이터 필터링
+        latest_df = rep_df[rep_df['기준일'] == latest_date].copy()
+        st.dataframe(latest_df, use_container_width=True)
+        
+        # 1년(1Y) 수익률 바 차트
+        if '1Y' in latest_df.columns and '상품명' in latest_df.columns:
+            plot_df = latest_df.dropna(subset=['1Y']).sort_values(by='1Y', ascending=False)
+            fig_rep = px.bar(plot_df, x='상품명', y='1Y', text='1Y', color='1Y', 
+                             color_continuous_scale=px.colors.diverging.RdYlBu[::-1],
+                             title="📊 상품별 1년(1Y) 수익률 랭킹")
+            fig_rep.update_traces(texttemplate='%{text}%', textposition='outside')
+            fig_rep.update_layout(height=500)
+            st.plotly_chart(fig_rep, use_container_width=True)
+    else:
+        st.info("데이터를 불러오는 중이거나 아직 입력되지 않았습니다.")
