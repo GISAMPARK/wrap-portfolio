@@ -32,7 +32,6 @@ if not st.session_state["authenticated"]:
 # ==========================================
 SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
 
-# 👇 사진에서 찾아낸 본사대표계좌 탭의 GID 적용 완료! 👇
 REP_SHEET_GID = "1430586087" 
 PENSION_SHEET_GID = "951679806" 
 STOCK_SHEET_GID = "1558094314" 
@@ -70,6 +69,9 @@ def load_rep_data():
             if col not in ['상품명', '기준일']:
                 df[col] = df[col].astype(str).str.replace(r'[^\d.-]', '', regex=True)
                 df[col] = pd.to_numeric(df[col], errors='coerce')
+        # 기준일을 날짜 형식으로 변환 (그래프를 그리기 위해 필수!)
+        if '기준일' in df.columns:
+            df['기준일'] = pd.to_datetime(df['기준일'], errors='coerce')
         return df
     except: return pd.DataFrame()
 
@@ -167,7 +169,8 @@ with col_us:
     u2.metric(label="나스닥", value=f"{market_data['나스닥'][0]:,.2f}", delta=f"{market_data['나스닥'][1]:.2f}%")
 st.markdown("---")
 
-tab_titles = ["🔍 VVIP 고객 포트폴리오 검색", "🏆 랩어카운트 전체 요약", "🏢 본사 대표 운용성과"]
+# 💡 피드백 1: 탭 이름 변경 (본사 대표계좌 운용성과)
+tab_titles = ["🔍 VVIP 고객 포트폴리오 검색", "🏆 랩어카운트 전체 요약", "🏢 본사 대표계좌 운용성과"]
 tabs = st.tabs(tab_titles)
 
 with tabs[0]:
@@ -455,26 +458,55 @@ with tabs[1]:
         else: st.info("현재 운용중인 데이터가 없습니다.")
 
 # ==========================================
-# 3️⃣ 세 번째 탭: 본사 대표 운용성과
+# 3️⃣ 세 번째 탭: 본사 대표계좌 운용성과
 # ==========================================
 with tabs[2]:
     st.header("🏢 본사 대표계좌 운용성과")
     if not rep_df.empty and '기준일' in rep_df.columns:
-        latest_date = rep_df['기준일'].dropna().max()
-        st.markdown(f"#### 📅 최근 업데이트 기준일: {latest_date}")
+        # 데이터 클렌징 (결측치 제거)
+        clean_rep_df = rep_df.dropna(subset=['기준일']).copy()
         
-        # 최신 기준일 데이터 필터링
-        latest_df = rep_df[rep_df['기준일'] == latest_date].copy()
-        st.dataframe(latest_df, use_container_width=True)
-        
-        # 1년(1Y) 수익률 바 차트
-        if '1Y' in latest_df.columns and '상품명' in latest_df.columns:
-            plot_df = latest_df.dropna(subset=['1Y']).sort_values(by='1Y', ascending=False)
-            fig_rep = px.bar(plot_df, x='상품명', y='1Y', text='1Y', color='1Y', 
-                             color_continuous_scale=px.colors.diverging.RdYlBu[::-1],
-                             title="📊 상품별 1년(1Y) 수익률 랭킹")
-            fig_rep.update_traces(texttemplate='%{text}%', textposition='outside')
-            fig_rep.update_layout(height=500)
-            st.plotly_chart(fig_rep, use_container_width=True)
-    else:
-        st.info("데이터를 불러오는 중이거나 아직 입력되지 않았습니다.")
+        if not clean_rep_df.empty:
+            latest_date = clean_rep_df['기준일'].max()
+            latest_date_str = latest_date.strftime('%Y년 %m월 %d일') if isinstance(latest_date, pd.Timestamp) else str(latest_date)
+            st.markdown(f"#### 📅 최근 업데이트 기준일: **{latest_date_str}**")
+            
+            # 1. 엑셀 데이터 표 (최신 기준일)
+            latest_df = clean_rep_df[clean_rep_df['기준일'] == latest_date].copy()
+            display_df = latest_df.copy()
+            display_df['기준일'] = display_df['기준일'].dt.strftime('%Y-%m-%d') if pd.api.types.is_datetime64_any_dtype(display_df['기준일']) else display_df['기준일']
+            st.dataframe(display_df, use_container_width=True)
+            
+            st.markdown("<br><hr style='border: 1px dashed #ddd;'><br>", unsafe_allow_html=True)
+            
+            # 💡 피드백 반영 2: 기간별(1M, 3M, 6M, 1Y) 가로형 막대그래프
+            st.markdown("#### 📊 상품별 기간 수익률 변화 (1M ➡️ 3M ➡️ 6M ➡️ 1Y)")
+            melt_cols = [c for c in ['1M', '3M', '6M', '1Y'] if c in latest_df.columns]
+            
+            if melt_cols:
+                df_melt = latest_df.melt(id_vars=['상품명'], value_vars=melt_cols, var_name='기간', value_name='수익률(%)')
+                df_melt['수익률(%)'] = pd.to_numeric(df_melt['수익률(%)'], errors='coerce').fillna(0)
+                
+                # 1Y 수익률이 가장 높은 상품이 맨 위에 오도록 정렬 순서 잡기
+                if '1Y' in latest_df.columns:
+                    sort_order = latest_df.sort_values('1Y', ascending=True)['상품명'].tolist()
+                else:
+                    sort_order = latest_df['상품명'].tolist()
+                    
+                fig_horiz = px.bar(df_melt, x='수익률(%)', y='상품명', color='기간', barmode='group', orientation='h',
+                                   category_orders={'상품명': sort_order, '기간': ['1M', '3M', '6M', '1Y']},
+                                   color_discrete_sequence=['#AEC7E8', '#1F77B4', '#FFBB78', '#FF7F0E'])
+                                   
+                # 가로 막대 끝에 숫자(수익률) 달아주기
+                fig_horiz.update_traces(texttemplate='%{x:.2f}%', textposition='outside')
+                
+                # 데이터(상품)가 많아지면 그래프 높이를 자동으로 쫙 늘려줍니다.
+                dynamic_height = max(500, len(sort_order) * 45)
+                fig_horiz.update_layout(height=dynamic_height, hoverlabel=dict(font=dict(size=16)))
+                
+                st.plotly_chart(fig_horiz, use_container_width=True)
+            
+            st.markdown("<br><hr style='border: 1px dashed #ddd;'><br>", unsafe_allow_html=True)
+            
+            # 💡 피드백 반영 3 (보너스): 과거부터 현재까지 시계열 꺾은선 그래프
+            st.markdown("#### 📈 과거부터 현재까지 1Y
