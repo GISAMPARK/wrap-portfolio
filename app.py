@@ -60,80 +60,121 @@ def get_market_indices():
 @st.cache_data(ttl=60)
 def load_rep_data():
     if not REP_SHEET_GID: return pd.DataFrame()
-    url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={REP_SHEET_GID}"
+    url = f"[https://docs.google.com/spreadsheets/d/](https://docs.google.com/spreadsheets/d/){SHEET_ID}/export?format=csv&gid={REP_SHEET_GID}"
     try:
         df = pd.read_csv(url)
-        df.columns = df.columns.str.strip().str.replace('\n', '')
+        df.columns = df.columns.astype(str).str.strip().str.replace('\n', '')
+        
+        # 💡 피드백 3 완벽 해결: 이상한 글자, 숫자, 헤더명을 '상품명'에서 완벽하게 걸러냅니다!
+        if '상품명' in df.columns:
+            df['상품명'] = df['상품명'].astype(str).str.strip()
+            def is_valid(name):
+                if len(name) < 2: return False
+                if name in ['1M', '3M', '6M', '1Y', '(단위:억원)', '수익률', '상품명', '기준일', 'nan', 'None']: return False
+                try:
+                    float(name.replace(',', ''))
+                    return False # 숫자로만 된 것도 가짜 상품명!
+                except:
+                    return True
+            df = df[df['상품명'].apply(is_valid)]
+            
         for col in df.columns:
             if col not in ['상품명', '기준일']:
-                df[col] = df[col].astype(str).str.replace(r'[^\d.-]', '', regex=True)
+                df[col] = df[col].astype(str).str.replace(r'[^0-9.-]', '', regex=True)
                 df[col] = pd.to_numeric(df[col], errors='coerce')
+                
         if '기준일' in df.columns:
             df['기준일'] = pd.to_datetime(df['기준일'], errors='coerce')
         return df
-    except: return pd.DataFrame()
+    except: 
+        return pd.DataFrame()
 
 @st.cache_data(ttl=60)
 def load_rap_data():
-    url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
+    url = f"[https://docs.google.com/spreadsheets/d/](https://docs.google.com/spreadsheets/d/){SHEET_ID}/export?format=csv"
     try:
         df = pd.read_csv(url)
-        df.columns = df.columns.str.replace(' ', '').str.strip()
+        df.columns = df.columns.astype(str).str.replace(' ', '').str.strip()
         if '총수익률(%)' in df.columns: df.rename(columns={'총수익률(%)': '수익률(%)'}, inplace=True)
         if '랩종류' in df.columns and '계좌명' not in df.columns: df.rename(columns={'랩종류': '계좌명'}, inplace=True)
-        df = df.dropna(subset=['고객명'])
-        df = df[df['고객명'].str.strip() != '']
+        
+        if '고객명' in df.columns:
+            df = df.dropna(subset=['고객명'])
+            df['고객명'] = df['고객명'].astype(str).str.strip()
+            df = df[df['고객명'] != '']
+            
         if '계좌명' not in df.columns: df['계좌명'] = '기본투자'
         df['계좌명'] = df['계좌명'].astype(str).str.replace('랩', '투자')
+        
         cols_to_clean = ['초기투자금', '추가투자금', '정산수익금', '누적수익금', '투자원금', '총투자금', '평가자산', '원금대비수익률(%)', '수익률(%)']
         for col in cols_to_clean:
             if col in df.columns:
-                df[col] = df[col].astype(str).str.replace(r'[^\d.-]', '', regex=True)
+                df[col] = df[col].astype(str).str.replace(r'[^0-9.-]', '', regex=True)
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+                
         if '날짜' in df.columns: df['날짜'] = pd.to_datetime(df['날짜'], errors='coerce')
         return df
-    except: return pd.DataFrame()
+    except Exception as e:
+        return pd.DataFrame()
 
 @st.cache_data(ttl=60)
 def load_pension_data():
     if not PENSION_SHEET_GID: return pd.DataFrame()
-    url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={PENSION_SHEET_GID}"
+    url = f"[https://docs.google.com/spreadsheets/d/](https://docs.google.com/spreadsheets/d/){SHEET_ID}/export?format=csv&gid={PENSION_SHEET_GID}"
     try:
         df = pd.read_csv(url)
-        df.columns = df.columns.str.replace(' ', '').str.strip()
-        df = df.dropna(subset=['고객명'])
-        if '계좌명' in df.columns:
+        df.columns = df.columns.astype(str).str.replace(' ', '').str.strip()
+        
+        if '고객명' in df.columns:
+            df = df.dropna(subset=['고객명'])
+            df['고객명'] = df['고객명'].astype(str).str.strip()
+            df = df[df['고객명'] != '']
+            
+        if '계좌명' in df.columns and '고객명' in df.columns and '날짜' in df.columns:
             df['temp_count'] = df.groupby(['고객명', '날짜', '계좌명']).cumcount() + 1
             df['계좌명'] = df.apply(lambda x: f"{x['계좌명']}_{x['temp_count']}" if x['temp_count'] > 1 else x['계좌명'], axis=1)
+            
         cols_to_clean = ['납입원금', '평가금액', '올해납입액', '수익률(%)']
         for col in cols_to_clean:
             if col in df.columns:
-                df[col] = df[col].astype(str).str.replace(r'[^\d.-]', '', regex=True)
+                df[col] = df[col].astype(str).str.replace(r'[^0-9.-]', '', regex=True)
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+                
         if '날짜' in df.columns: df['날짜'] = pd.to_datetime(df['날짜'], errors='coerce')
         return df
-    except: return pd.DataFrame()
+    except Exception as e:
+        return pd.DataFrame()
 
 @st.cache_data(ttl=60)
 def load_stock_data():
     if not STOCK_SHEET_GID: return pd.DataFrame()
-    url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={STOCK_SHEET_GID}"
+    url = f"[https://docs.google.com/spreadsheets/d/](https://docs.google.com/spreadsheets/d/){SHEET_ID}/export?format=csv&gid={STOCK_SHEET_GID}"
     try:
         df = pd.read_csv(url)
-        df.columns = df.columns.str.replace(' ', '').str.strip()
-        df = df.dropna(subset=['고객명'])
+        df.columns = df.columns.astype(str).str.replace(' ', '').str.strip()
+        
+        if '고객명' in df.columns:
+            df = df.dropna(subset=['고객명'])
+            df['고객명'] = df['고객명'].astype(str).str.strip()
+            df = df[df['고객명'] != '']
+            
         if '원금' in df.columns and '투자원금' not in df.columns:
             df.rename(columns={'원금': '투자원금'}, inplace=True)
+            
         if '날짜' in df.columns: df['날짜'] = pd.to_datetime(df['날짜'], errors='coerce')
-        df['계좌순번'] = df.groupby(['고객명', '날짜']).cumcount() + 1
-        df['계좌명'] = df['계좌순번'].apply(lambda x: f"위탁계좌 {x}")
+        
+        if '고객명' in df.columns and '날짜' in df.columns:
+            df['계좌순번'] = df.groupby(['고객명', '날짜']).cumcount() + 1
+            df['계좌명'] = df['계좌순번'].apply(lambda x: f"위탁계좌 {x}")
+            
         cols_to_clean = ['투자원금', '평가금액', '수익률(%)', '갯수']
         for col in cols_to_clean:
             if col in df.columns:
-                df[col] = df[col].astype(str).str.replace(r'[^\d.-]', '', regex=True)
+                df[col] = df[col].astype(str).str.replace(r'[^0-9.-]', '', regex=True)
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         return df
-    except: return pd.DataFrame()
+    except Exception as e:
+        return pd.DataFrame()
 
 # ==========================================
 # 🖥️ 메인 화면 구성
@@ -166,9 +207,9 @@ tabs = st.tabs(tab_titles)
 with tabs[0]:
     st.header("🔍 개별 고객 종합 포트폴리오 검색")
     all_clients = set()
-    if not df_rap.empty: all_clients.update(df_rap["고객명"].dropna().unique())
-    if not df_pen.empty: all_clients.update(df_pen["고객명"].dropna().unique())
-    if not df_stock.empty: all_clients.update(df_stock["고객명"].dropna().unique())
+    if not df_rap.empty and '고객명' in df_rap.columns: all_clients.update(df_rap["고객명"].dropna().unique())
+    if not df_pen.empty and '고객명' in df_pen.columns: all_clients.update(df_pen["고객명"].dropna().unique())
+    if not df_stock.empty and '고객명' in df_stock.columns: all_clients.update(df_stock["고객명"].dropna().unique())
     client_list = sorted(list(all_clients))
     
     selected_client = st.selectbox("👤 고객명 검색:", ["--- 고객을 선택하세요 ---"] + client_list)
@@ -435,16 +476,24 @@ with tabs[0]:
 # ==========================================
 with tabs[1]:
     st.header("🏆 가입 연도 및 투자 종류별 평균 수익률")
-    if not df_rap.empty and '수익률(%)' in df_rap.columns:
-        active_df = df_rap[df_rap['비고'] != '해지'].copy()
-        if not active_df.empty:
-            latest_df = active_df.sort_values('날짜').groupby(['고객명', '계좌명']).tail(1).copy()
-            if '투자시작일' in latest_df.columns:
-                latest_df['가입연도'] = latest_df['투자시작일'].astype(str).str.strip().str[:4] + "년"
-                yearly_avg = latest_df.groupby(['가입연도', '계좌명'])[['원금대비수익률(%)', '수익률(%)']].mean().reset_index().round(2)
-                st.dataframe(yearly_avg, use_container_width=True)
-            else: st.warning("투자시작일 데이터가 필요합니다.")
-        else: st.info("현재 운용중인 데이터가 없습니다.")
+    if not df_rap.empty:
+        if '수익률(%)' in df_rap.columns:
+            active_df = df_rap[df_rap['비고'] != '해지'].copy() if '비고' in df_rap.columns else df_rap.copy()
+            if not active_df.empty:
+                if '투자시작일' in active_df.columns:
+                    latest_df = active_df.sort_values('날짜').groupby(['고객명', '계좌명']).tail(1).copy()
+                    latest_df['가입연도'] = latest_df['투자시작일'].astype(str).str.strip().str[:4] + "년"
+                    cols_to_mean = [c for c in ['원금대비수익률(%)', '수익률(%)'] if c in latest_df.columns]
+                    yearly_avg = latest_df.groupby(['가입연도', '계좌명'])[cols_to_mean].mean().reset_index().round(2)
+                    st.dataframe(yearly_avg, use_container_width=True)
+                else:
+                    st.warning("투자시작일 데이터가 필요합니다.")
+            else:
+                st.info("현재 운용중인 데이터가 없습니다.")
+        else:
+            st.warning("데이터에 '수익률(%)' 열이 없습니다.")
+    else:
+        st.info("현재 분석 가능한 랩어카운트 데이터가 없습니다.")
 
 # ==========================================
 # 3️⃣ 세 번째 탭: 본사 대표계좌 운용성과
@@ -459,21 +508,18 @@ with tabs[2]:
             latest_date_str = latest_date.strftime('%Y년 %m월 %d일') if isinstance(latest_date, pd.Timestamp) else str(latest_date)
             st.markdown(f"#### 📅 최근 업데이트 기준일: **{latest_date_str}**")
             
-            # 💡 피드백 1: 아코디언 메뉴(접기)를 없애고, 
-            # 데이터 개수에 맞춰 표 높이를 알아서 길게 쭉 펴서 스크롤 없이 한눈에 보이게 만듭니다!
+            # 💡 드래그 없이 표를 한눈에 볼 수 있도록 자동 높이 맞춤 (아코디언 제거)
             latest_df = clean_rep_df[clean_rep_df['기준일'] == latest_date].copy()
             display_df = latest_df.copy()
             display_df['기준일'] = display_df['기준일'].dt.strftime('%Y-%m-%d') if pd.api.types.is_datetime64_any_dtype(display_df['기준일']) else display_df['기준일']
             
-            # (데이터 개수 * 줄 높이) + 헤더 높이 = 스크롤 안 생기는 맞춤 높이 계산
             dynamic_table_height = (len(display_df) * 36) + 42 
             st.dataframe(display_df, use_container_width=True, height=dynamic_table_height)
             
             st.markdown("<br>", unsafe_allow_html=True)
             
-            # 💡 피드백 2: 찌꺼기 텍스트가 뜨던 선택 박스는 완전히 없애고, 
-            # 기본 선 그래프를 '위아래로 2배(900px)' 쫙 늘려서 시원시원하게 만들었습니다!
-            st.markdown("#### 📈 과거부터 현재까지 1Y 수익률 추이")
+            # 💡 이상한 찌꺼기 글씨 완벽 제거 및 차트 세로 길이 2배(900px) 확장!
+            st.markdown("#### 📈 과거부터 현재까지 1Y 수익률 추이 (선 그래프)")
             
             if len(clean_rep_df['기준일'].unique()) > 1:
                 trend_df = clean_rep_df.dropna(subset=['1Y']).sort_values('기준일')
@@ -487,7 +533,7 @@ with tabs[2]:
                                   "<b><span style='font-size:20px; color:#1F77B4;'>수익률: %{y:.2f}%</span></b><extra></extra>"
                 )
                 
-                # 💡 핵심: 그래프 높이를 900으로 크게 설정하여 난잡함을 해결!
+                # 차트의 높이를 900으로 아주 큼직하게 키워서 선들이 겹치지 않게 합니다.
                 fig_trend.update_layout(height=900, hoverlabel=dict(font=dict(size=18)))
                 st.plotly_chart(fig_trend, use_container_width=True)
             else:
