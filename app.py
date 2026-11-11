@@ -509,4 +509,17 @@ with tabs[2]:
             st.markdown("<br><hr style='border: 1px dashed #ddd;'><br>", unsafe_allow_html=True)
             
             # 💡 피드백 반영 3 (보너스): 과거부터 현재까지 시계열 꺾은선 그래프
-            st.markdown("#### 📈 과거부터 현재까지 1Y
+            st.markdown("#### 📈 과거부터 현재까지 1Y 수익률 추이 (선 그래프)")
+            if len(clean_rep_df['기준일'].unique()) > 1:
+                trend_df = clean_rep_df.dropna(subset=['1Y']).sort_values('기준일')
+                fig_trend = px.line(trend_df, x='기준일', y='1Y', color='상품명', markers=True)
+                fig_trend.update_xaxes(tickformat="%y년 %m월 %d일", title="업데이트 기준일")
+                fig_trend.update_yaxes(title="1Y 수익률(%)")
+                fig_trend.update_layout(height=500, hoverlabel=dict(font=dict(size=16)))
+                st.plotly_chart(fig_trend, use_container_width=True)
+            else:
+                st.info("💡 과거 데이터가 앞으로 더 누적되면 여기에 시계열 추이 선 그래프가 화려하게 나타납니다.")
+        else:
+            st.info("데이터를 불러오는 중이거나 아직 입력되지 않았습니다.")
+    else:
+        st.info("데이터를 불러오는 중이거나 아직 입력되지 않았습니다.")
