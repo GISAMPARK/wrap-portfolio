@@ -165,9 +165,20 @@ with tabs[0]:
         total_rap_asset = 0
         total_pen_asset = 0
         
+        active_rap_accounts = []
+        terminated_rap_accounts = []
+        
         if not c_rap.empty:
             for acc in c_rap['계좌명'].unique():
-                total_rap_asset += c_rap[c_rap['계좌명'] == acc].iloc[-1].get('평가자산', 0)
+                acc_df = c_rap[c_rap['계좌명'] == acc]
+                latest_status = acc_df.iloc[-1].get('비고', '운용중')
+                
+                # 💡 핵심 로직: '해지' 상태면 자산 합산에서 뺍니다.
+                if str(latest_status).strip() == '해지':
+                    terminated_rap_accounts.append(acc)
+                else:
+                    active_rap_accounts.append(acc)
+                    total_rap_asset += acc_df.iloc[-1].get('평가자산', 0)
                 
         if not c_pen.empty:
             for acc in c_pen['계좌명'].unique():
@@ -177,7 +188,11 @@ with tabs[0]:
         
         # 👑 통합 자산 브리핑 (상단)
         st.markdown(f"## 👑 {safe_client_name} 고객님 종합 자산 브리핑")
-        st.markdown(f"### 총 금융자산 평가액: **<span style='color:#CD2E3A;'>{total_asset:,.0f}원</span>**", unsafe_allow_html=True)
+        st.markdown(f"### 총 운용 금융자산 평가액: **<span style='color:#CD2E3A;'>{total_asset:,.0f}원</span>**", unsafe_allow_html=True)
+        
+        # 해지 알림 메시지
+        if terminated_rap_accounts:
+            st.warning(f"🛑 [안내] 해지된 랩어카운트 내역이 존재합니다. (위 총 금융자산 평가액 합산에서는 자동 제외되었습니다.)")
         
         # 📊 자산 비중 도넛 차트
         if total_asset > 0:
@@ -205,18 +220,28 @@ with tabs[0]:
             if not c_rap.empty:
                 account_list = c_rap['계좌명'].unique()
                 for acc in account_list:
-                    st.markdown(f"#### 📊 [{acc}] 운용 현황")
                     acc_df = c_rap[c_rap['계좌명'] == acc]
                     latest_data = acc_df.iloc[-1]
+                    status = str(latest_data.get('비고', '운용중')).strip()
+                    
+                    # 🛑 해지 뱃지 추가
+                    if status == '해지':
+                        st.markdown(f"#### 🛑 [{acc}] 과거 운용 현황 <span style='color:red; font-size:16px;'>(해지된 계좌)</span>", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"#### 📊 [{acc}] 운용 현황")
                     
                     c1, c2, c3 = st.columns(3)
-                    c1.metric("💎 평가자산", f"{latest_data.get('평가자산', 0):,.0f}원")
+                    c1.metric("💎 최종 평가자산", f"{latest_data.get('평가자산', 0):,.0f}원")
                     c2.metric("🟰 투자원금", f"{latest_data.get('투자원금', 0):,.0f}원")
                     c3.metric("🔵 총 수익률", f"{latest_data.get('수익률(%)', 0)}%")
                     
                     if "원금대비수익률(%)" in acc_df.columns:
-                        fig1 = px.line(acc_df, x="날짜", y="원금대비수익률(%)", markers=True, title=f"🟠 {acc} 원금대비 수익률 추이")
-                        fig1.update_traces(line=dict(width=3, color='#FF7F0E'))
+                        # 💡 핵심 로직: 해지 계좌는 회색 라인으로 표시
+                        color = '#888888' if status == '해지' else '#FF7F0E'
+                        title_text = f"🌑 {acc} 원금대비 수익률 추이 (종료)" if status == '해지' else f"🟠 {acc} 원금대비 수익률 추이"
+                        
+                        fig1 = px.line(acc_df, x="날짜", y="원금대비수익률(%)", markers=True, title=title_text)
+                        fig1.update_traces(line=dict(width=3, color=color))
                         st.plotly_chart(fig1, use_container_width=True)
                     st.markdown("<hr style='border: 1px dashed #ddd;'>", unsafe_allow_html=True)
             else:
@@ -235,9 +260,8 @@ with tabs[0]:
                     c2.metric("납입원금", f"{latest_data.get('납입원금', 0):,.0f}원")
                     c3.metric("📈 수익률(%)", f"{latest_data.get('수익률(%)', 0)}%")
                     
-                    # 올해 세액공제 한도 진행률 바
                     yearly_paid = latest_data.get('올해납입액', 0)
-                    progress = min(yearly_paid / 6000000, 1.0) # 연금저축 한도 600만원 기준 시각화
+                    progress = min(yearly_paid / 6000000, 1.0)
                     st.markdown(f"**💰 올해 납입액 (세액공제용):** {yearly_paid:,.0f}원 / 한도 6,000,000원")
                     st.progress(progress)
                     
@@ -252,26 +276,32 @@ with tabs[0]:
         st.info("👆 위 검색창을 클릭하여 조회할 고객을 선택해 주세요.")
 
 # ==========================================
-# 2️⃣ 두 번째 탭: 랩어카운트 전체 요약 (기존 유지)
+# 2️⃣ 두 번째 탭: 랩어카운트 전체 요약
 # ==========================================
 with tabs[1]:
     st.header("🏆 가입 연도 및 투자 종류별 평균 수익률")
     if not df_rap.empty and '수익률(%)' in df_rap.columns:
-        latest_df = df_rap.sort_values('날짜').groupby(['고객명', '계좌명']).tail(1).copy()
-        if '투자시작일' in latest_df.columns:
-            latest_df['가입연도'] = latest_df['투자시작일'].astype(str).str.strip().str[:4] + "년"
-            yearly_avg = latest_df.groupby(['가입연도', '계좌명'])[['원금대비수익률(%)', '수익률(%)']].mean().reset_index().round(2)
-            st.dataframe(yearly_avg, use_container_width=True)
-            
-            fig_bar = px.bar(yearly_avg, x='가입연도', y='수익률(%)', color='계좌명', barmode='group')
-            st.plotly_chart(fig_bar, use_container_width=True)
+        # 💡 핵심 로직: 전체 평균 계산 시 '해지' 고객은 제외합니다.
+        active_df = df_rap[df_rap['비고'] != '해지'].copy()
+        
+        if not active_df.empty:
+            latest_df = active_df.sort_values('날짜').groupby(['고객명', '계좌명']).tail(1).copy()
+            if '투자시작일' in latest_df.columns:
+                latest_df['가입연도'] = latest_df['투자시작일'].astype(str).str.strip().str[:4] + "년"
+                yearly_avg = latest_df.groupby(['가입연도', '계좌명'])[['원금대비수익률(%)', '수익률(%)']].mean().reset_index().round(2)
+                st.dataframe(yearly_avg, use_container_width=True)
+                
+                fig_bar = px.bar(yearly_avg, x='가입연도', y='수익률(%)', color='계좌명', barmode='group')
+                st.plotly_chart(fig_bar, use_container_width=True)
+            else:
+                st.warning("투자시작일 데이터가 필요합니다.")
         else:
-            st.warning("투자시작일 데이터가 필요합니다.")
+            st.info("현재 운용중인 랩어카운트 데이터가 없습니다.")
     else:
         st.info("데이터를 불러오는 중이거나 아직 입력되지 않았습니다.")
 
 # ==========================================
-# 3️⃣ 세 번째 탭: 본사 대표 운용성과 (기존 유지)
+# 3️⃣ 세 번째 탭: 본사 대표 운용성과
 # ==========================================
 with tabs[2]:
     st.header("🏢 본사 대표계좌 운용성과")
