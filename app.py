@@ -459,53 +459,37 @@ with tabs[2]:
             latest_date_str = latest_date.strftime('%Y년 %m월 %d일') if isinstance(latest_date, pd.Timestamp) else str(latest_date)
             st.markdown(f"#### 📅 최근 업데이트 기준일: **{latest_date_str}**")
             
-            # 💡 피드백 3: 드래그 없이 한눈에 볼 수 있도록 원본 표를 숨김(접기) 처리
-            with st.expander("📋 전체 상품 상세 수익률 표 보기 (클릭하여 펼치기)", expanded=False):
-                latest_df = clean_rep_df[clean_rep_df['기준일'] == latest_date].copy()
-                display_df = latest_df.copy()
-                display_df['기준일'] = display_df['기준일'].dt.strftime('%Y-%m-%d') if pd.api.types.is_datetime64_any_dtype(display_df['기준일']) else display_df['기준일']
-                st.dataframe(display_df, use_container_width=True)
+            # 💡 피드백 1: 아코디언 메뉴(접기)를 없애고, 
+            # 데이터 개수에 맞춰 표 높이를 알아서 길게 쭉 펴서 스크롤 없이 한눈에 보이게 만듭니다!
+            latest_df = clean_rep_df[clean_rep_df['기준일'] == latest_date].copy()
+            display_df = latest_df.copy()
+            display_df['기준일'] = display_df['기준일'].dt.strftime('%Y-%m-%d') if pd.api.types.is_datetime64_any_dtype(display_df['기준일']) else display_df['기준일']
+            
+            # (데이터 개수 * 줄 높이) + 헤더 높이 = 스크롤 안 생기는 맞춤 높이 계산
+            dynamic_table_height = (len(display_df) * 36) + 42 
+            st.dataframe(display_df, use_container_width=True, height=dynamic_table_height)
             
             st.markdown("<br>", unsafe_allow_html=True)
             
-            # 💡 피드백 2: 복잡한 선 그래프를 깔끔하게 볼 수 있도록 다중 선택(Multi-select) 기능 추가!
-            # 💡 피드백 1: 기간별 막대 차트는 제거했습니다.
+            # 💡 피드백 2: 찌꺼기 텍스트가 뜨던 선택 박스는 완전히 없애고, 
+            # 기본 선 그래프를 '위아래로 2배(900px)' 쫙 늘려서 시원시원하게 만들었습니다!
             st.markdown("#### 📈 과거부터 현재까지 1Y 수익률 추이")
             
             if len(clean_rep_df['기준일'].unique()) > 1:
                 trend_df = clean_rep_df.dropna(subset=['1Y']).sort_values('기준일')
                 
-                # 기본으로 보여줄 대표 상품 3개 자동 선정 (KOSPI, KOSDAQ, 가장 수익률 좋은 상품 1개)
-                all_products = sorted(trend_df['상품명'].unique())
-                default_products = [p for p in ['KOSPI', 'KOSDAQ'] if p in all_products]
-                if '1Y' in latest_df.columns:
-                    top_product = latest_df.sort_values('1Y', ascending=False)['상품명'].head(1).tolist()
-                    for tp in top_product:
-                        if tp not in default_products and tp in all_products:
-                            default_products.append(tp)
+                fig_trend = px.line(trend_df, x='기준일', y='1Y', color='상품명', markers=True)
+                fig_trend.update_xaxes(tickformat="%y년 %m월 %d일", title="업데이트 기준일")
+                fig_trend.update_yaxes(title="1Y 수익률(%)")
                 
-                # 사용자가 보고 싶은 상품만 쏙쏙 고를 수 있는 검색기
-                selected_products = st.multiselect(
-                    "👇 그래프에 표시할 상품을 선택하세요 (여러 개 선택 가능)",
-                    options=all_products,
-                    default=default_products
+                fig_trend.update_traces(
+                    hovertemplate="<b><span style='font-size:16px;'>%{x|%Y년 %m월 %d일}</span></b><br>" +
+                                  "<b><span style='font-size:20px; color:#1F77B4;'>수익률: %{y:.2f}%</span></b><extra></extra>"
                 )
                 
-                if selected_products:
-                    filtered_trend_df = trend_df[trend_df['상품명'].isin(selected_products)]
-                    fig_trend = px.line(filtered_trend_df, x='기준일', y='1Y', color='상품명', markers=True)
-                    fig_trend.update_xaxes(tickformat="%y년 %m월 %d일", title="업데이트 기준일")
-                    fig_trend.update_yaxes(title="1Y 수익률(%)")
-                    
-                    # 💡 마우스 오버 팝업 크기 키우기 및 디자인
-                    fig_trend.update_traces(
-                        hovertemplate="<b><span style='font-size:16px;'>%{x|%Y년 %m월 %d일}</span></b><br>" +
-                                      "<b><span style='font-size:20px; color:#1F77B4;'>수익률: %{y:.2f}%</span></b><extra></extra>"
-                    )
-                    fig_trend.update_layout(height=550, hoverlabel=dict(font=dict(size=18)))
-                    st.plotly_chart(fig_trend, use_container_width=True)
-                else:
-                    st.warning("선택된 상품이 없습니다. 위의 박스에서 상품을 선택해주세요.")
+                # 💡 핵심: 그래프 높이를 900으로 크게 설정하여 난잡함을 해결!
+                fig_trend.update_layout(height=900, hoverlabel=dict(font=dict(size=18)))
+                st.plotly_chart(fig_trend, use_container_width=True)
             else:
                 st.info("💡 과거 데이터가 앞으로 더 누적되면 여기에 시계열 추이 선 그래프가 화려하게 나타납니다.")
         else:
