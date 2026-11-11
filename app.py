@@ -126,7 +126,6 @@ def load_stock_data():
         if '원금' in df.columns and '투자원금' not in df.columns:
             df.rename(columns={'원금': '투자원금'}, inplace=True)
             
-        # 💡 피드백 1: 같은 날짜, 같은 고객이면 '위탁계좌 1', '위탁계좌 2'로 자동 분리
         if '날짜' in df.columns: df['날짜'] = pd.to_datetime(df['날짜'], errors='coerce')
         
         df['계좌순번'] = df.groupby(['고객명', '날짜']).cumcount() + 1
@@ -169,9 +168,6 @@ st.markdown("---")
 tab_titles = ["🔍 VVIP 고객 포트폴리오 검색", "🏆 랩어카운트 전체 요약", "🏢 본사 대표 운용성과"]
 tabs = st.tabs(tab_titles)
 
-# ==========================================
-# 1️⃣ 첫 번째 탭: 개별 고객 종합 자산 검색
-# ==========================================
 with tabs[0]:
     st.header("🔍 개별 고객 종합 포트폴리오 검색")
     
@@ -198,8 +194,6 @@ with tabs[0]:
         
         active_rap_accounts = []
         terminated_rap_accounts = []
-        
-        # We will collect individual accounts to build the detailed table row by row
         detailed_rows = []
         
         if not c_rap.empty:
@@ -274,7 +268,6 @@ with tabs[0]:
         
         with col_chart:
             if not pie_data.empty:
-                # 💡 피드백 2: 도넛 차트 실선 밖으로 빼기 완료
                 fig_pie = px.pie(pie_data, values='금액', names='자산 구분', hole=0.5,
                                  color='자산 구분', color_discrete_map={'투자자산(랩)':'#1F77B4', '노후자산(연금)':'#2CA02C', '노후자산(IRP)':'#98DF8A', '위탁자산(주식)':'#FF7F0E'})
                 fig_pie.update_traces(textposition='outside', textinfo='label+percent', textfont_size=15, pull=[0.02]*len(pie_data))
@@ -324,7 +317,6 @@ with tabs[0]:
         st.markdown("#### 📈 고객 총자산 성장 추이")
         dfs_to_merge = []
         
-        # For the area chart, we need to calculate total asset AND total principal at each date to compute return rate
         if not c_rap.empty:
             rap_hist = c_rap[c_rap['비고'] != '해지'].groupby('날짜')[['평가자산', '투자원금']].sum().reset_index().rename(columns={'평가자산': '랩_평가', '투자원금': '랩_원금'})
             dfs_to_merge.append(rap_hist)
@@ -345,20 +337,20 @@ with tabs[0]:
             merged['총자산_평가'] = merged[eval_cols].sum(axis=1)
             merged['총자산_원금'] = merged[prin_cols].sum(axis=1)
             
-            # Calculate return rate
             merged['수익률(%)'] = ((merged['총자산_평가'] - merged['총자산_원금']) / merged['총자산_원금']) * 100
             merged['수익률(%)'] = merged['수익률(%)'].fillna(0)
             
             fig_trend = px.area(merged, x='날짜', y='총자산_평가', title="날짜별 금융자산 합산 우상향 지표", color_discrete_sequence=['#CD2E3A'])
+            # 💡 피드백 2번 수정: 마우스 오버 팝업 크기 및 내용 개선
             fig_trend.update_traces(
                 mode='lines+markers', 
                 marker=dict(size=6),
-                hovertemplate="<b>%{x|%y년 %m월 %d일}</b><br><br>" +
-                              "<span style='font-size:16px;'>총 평가금액: %{y:,.0f}원</span><br>" +
-                              "<span style='font-size:18px; font-weight:bold; color:#1F77B4;'>총 수익률: %{customdata[0]:.2f}%</span><extra></extra>",
+                hovertemplate="<b><span style='font-size:18px;'>%{x|%Y년 %m월 %d일}</span></b><br><br>" +
+                              "<b><span style='font-size:22px;'>💰 총 평가금액: %{y:,.0f}원</span></b><br>" +
+                              "<b><span style='font-size:22px; color:#1F77B4;'>📈 총 수익률: %{customdata[0]:.2f}%</span></b><extra></extra>",
                 customdata=merged[['수익률(%)']]
             )
-            # 💡 피드백 2: x축 월/연도 한글 포맷
+            fig_trend.update_layout(hoverlabel=dict(font_size=20, padding=dict(t=20, b=20, l=20, r=20)))
             fig_trend.update_xaxes(tickformat="%y년 %m월", dtick="M1") 
             fig_trend.update_yaxes(title="총자산")
             st.plotly_chart(fig_trend, use_container_width=True)
@@ -392,6 +384,8 @@ with tabs[0]:
                         color = '#888888' if status == '해지' else '#FF7F0E'
                         fig1 = px.line(acc_df, x="날짜", y="원금대비수익률(%)", markers=True, title=f"🟠 {acc} 수익률 추이")
                         fig1.update_traces(line=dict(width=3, color=color))
+                        # 💡 피드백 1번 수정: x축 한글화
+                        fig1.update_xaxes(tickformat="%y년 %m월", dtick="M1")
                         st.plotly_chart(fig1, use_container_width=True)
                     st.markdown("<hr style='border: 1px dashed #ddd;'>", unsafe_allow_html=True)
             else: st.info("내역이 없습니다.")
@@ -410,6 +404,8 @@ with tabs[0]:
                     if "수익률(%)" in acc_df.columns:
                         fig2 = px.line(acc_df, x="날짜", y="수익률(%)", markers=True, title=f"🟢 {acc} 총 수익률 추이")
                         fig2.update_traces(line=dict(width=3, color='#2CA02C'))
+                        # 💡 피드백 1번 수정: x축 한글화
+                        fig2.update_xaxes(tickformat="%y년 %m월", dtick="M1")
                         st.plotly_chart(fig2, use_container_width=True)
                         
                     st.markdown("<hr style='border: 1px dashed #ddd;'>", unsafe_allow_html=True)
@@ -435,6 +431,8 @@ with tabs[0]:
                     if "수익률(%)" in acc_df.columns:
                         fig3 = px.line(acc_df, x="날짜", y="수익률(%)", markers=True, title=f"🔵 {acc} 총 수익률 추이")
                         fig3.update_traces(line=dict(width=3, color='#1F77B4'))
+                        # 💡 피드백 1번 수정: x축 한글화
+                        fig3.update_xaxes(tickformat="%y년 %m월", dtick="M1")
                         st.plotly_chart(fig3, use_container_width=True)
                         
                     st.markdown("<hr style='border: 1px dashed #ddd;'>", unsafe_allow_html=True)
