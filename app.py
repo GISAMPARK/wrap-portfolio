@@ -199,6 +199,9 @@ with tabs[0]:
         active_rap_accounts = []
         terminated_rap_accounts = []
         
+        # We will collect individual accounts to build the detailed table row by row
+        detailed_rows = []
+        
         if not c_rap.empty:
             for acc in c_rap['계좌명'].unique():
                 acc_df = c_rap[c_rap['계좌명'] == acc]
@@ -207,26 +210,40 @@ with tabs[0]:
                     terminated_rap_accounts.append(acc)
                 else:
                     active_rap_accounts.append(acc)
-                    total_rap_asset += latest.get('평가자산', 0)
-                    total_rap_prin += latest.get('투자원금', 0)
+                    eval_amt = latest.get('평가자산', 0)
+                    prin_amt = latest.get('투자원금', 0)
+                    total_rap_asset += eval_amt
+                    total_rap_prin += prin_amt
+                    ret = ((eval_amt - prin_amt) / prin_amt * 100) if prin_amt else 0
+                    detailed_rows.append({"구분": "🟦 랩", "계좌": acc, "원금": prin_amt, "평가액": eval_amt, "수익률": ret})
                     
         if not c_pen.empty:
             for acc in c_pen['계좌명'].unique():
                 latest = c_pen[c_pen['계좌명'] == acc].iloc[-1]
+                eval_amt = latest.get('평가금액', 0)
+                prin_amt = latest.get('납입원금', 0)
+                ret = ((eval_amt - prin_amt) / prin_amt * 100) if prin_amt else 0
+                
                 if 'IRP' in str(acc).upper():
-                    total_irp_asset += latest.get('평가금액', 0)
-                    total_irp_prin += latest.get('납입원금', 0)
+                    total_irp_asset += eval_amt
+                    total_irp_prin += prin_amt
                     total_irp_tax_paid += latest.get('올해납입액', 0)
+                    detailed_rows.append({"구분": "🟩 IRP", "계좌": acc, "원금": prin_amt, "평가액": eval_amt, "수익률": ret})
                 else:
-                    total_pen_asset += latest.get('평가금액', 0)
-                    total_pen_prin += latest.get('납입원금', 0)
+                    total_pen_asset += eval_amt
+                    total_pen_prin += prin_amt
                     total_tax_paid += latest.get('올해납입액', 0)
+                    detailed_rows.append({"구분": "🟩 연금저축", "계좌": acc, "원금": prin_amt, "평가액": eval_amt, "수익률": ret})
                 
         if not c_stock.empty:
             for acc in c_stock['계좌명'].unique():
                 latest = c_stock[c_stock['계좌명'] == acc].iloc[-1]
-                total_stock_asset += latest.get('평가금액', 0)
-                total_stock_prin += latest.get('투자원금', 0)
+                eval_amt = latest.get('평가금액', 0)
+                prin_amt = latest.get('투자원금', 0)
+                ret = ((eval_amt - prin_amt) / prin_amt * 100) if prin_amt else 0
+                total_stock_asset += eval_amt
+                total_stock_prin += prin_amt
+                detailed_rows.append({"구분": "🟧 위탁(주식)", "계좌": acc, "원금": prin_amt, "평가액": eval_amt, "수익률": ret})
                 
         total_asset = total_rap_asset + total_pen_asset + total_irp_asset + total_stock_asset
         total_prin = total_rap_prin + total_pen_prin + total_irp_prin + total_stock_prin
@@ -247,7 +264,7 @@ with tabs[0]:
             st.warning(f"🛑 해지된 랩어카운트 내역이 존재하여 위 자산 합산에서는 제외되었습니다.")
         st.markdown("---")
         
-        col_chart, col_detail = st.columns([1, 1.2])
+        col_chart, col_detail = st.columns([1, 1.3])
         
         pie_data = pd.DataFrame({
             '자산 구분': ['투자자산(랩)', '노후자산(연금)', '노후자산(IRP)', '위탁자산(주식)'],
@@ -268,46 +285,37 @@ with tabs[0]:
             st.markdown("#### 📋 자산별 운용 세부 현황")
             html_table = '''
             <div style="padding-top: 15px;">
-            <table style="width: 100%; text-align: center; border-collapse: collapse; font-size: 17px; font-family: 'Malgun Gothic', sans-serif;">
+            <table style="width: 100%; text-align: center; border-collapse: collapse; font-size: 16px; font-family: 'Malgun Gothic', sans-serif;">
                 <thead>
                     <tr style="background-color: #f0f2f6; border-bottom: 2px solid #ccc;">
-                        <th style="padding: 15px; font-weight: bold; color: #333;">자산 종류</th>
-                        <th style="padding: 15px; font-weight: bold; color: #333;">투자원금</th>
-                        <th style="padding: 15px; font-weight: bold; color: #333;">현재평가액</th>
-                        <th style="padding: 15px; font-weight: bold; color: #333;">수익률</th>
+                        <th style="padding: 12px; font-weight: bold; color: #333;">구분</th>
+                        <th style="padding: 12px; font-weight: bold; color: #333;">계좌명</th>
+                        <th style="padding: 12px; font-weight: bold; color: #333;">투자원금</th>
+                        <th style="padding: 12px; font-weight: bold; color: #333;">현재평가액</th>
+                        <th style="padding: 12px; font-weight: bold; color: #333;">수익률</th>
                     </tr>
                 </thead>
                 <tbody>
             '''
-            if total_rap_asset > 0:
-                ret = ((total_rap_asset - total_rap_prin) / total_rap_prin * 100) if total_rap_prin else 0
-                html_table += f"<tr><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>🟦 랩어카운트</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_rap_prin:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_rap_asset:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{ret:.2f}%</td></tr>"
-            
-            if total_pen_asset > 0:
-                ret = ((total_pen_asset - total_pen_prin) / total_pen_prin * 100) if total_pen_prin else 0
-                html_table += f"<tr><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>🟩 연금저축</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_pen_prin:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_pen_asset:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{ret:.2f}%</td></tr>"
-
-            if total_irp_asset > 0:
-                ret = ((total_irp_asset - total_irp_prin) / total_irp_prin * 100) if total_irp_prin else 0
-                html_table += f"<tr><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>🟩 IRP</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_irp_prin:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_irp_asset:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{ret:.2f}%</td></tr>"
-            
-            if total_stock_asset > 0:
-                ret = ((total_stock_asset - total_stock_prin) / total_stock_prin * 100) if total_stock_prin else 0
-                html_table += f"<tr><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>🟧 위탁(주식)</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_stock_prin:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_stock_asset:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{ret:.2f}%</td></tr>"
+            for r in detailed_rows:
+                html_table += f"<tr><td style='padding: 10px; border-bottom: 1px solid #eaeaea;'>{r['구분']}</td>"
+                html_table += f"<td style='padding: 10px; border-bottom: 1px solid #eaeaea;'>{r['계좌']}</td>"
+                html_table += f"<td style='padding: 10px; border-bottom: 1px solid #eaeaea;'>{r['원금']:,.0f}</td>"
+                html_table += f"<td style='padding: 10px; border-bottom: 1px solid #eaeaea;'>{r['평가액']:,.0f}</td>"
+                html_table += f"<td style='padding: 10px; border-bottom: 1px solid #eaeaea;'>{r['수익률']:.2f}%</td></tr>"
             
             tot_ret = ((total_asset - total_prin) / total_prin * 100) if total_prin else 0
             html_table += f'''
-                <tr style="background-color: #e6f0ff; border-top: 2px solid #4a90e2; font-size: 19px;">
-                    <td style="padding: 18px; font-weight: bold; color: #000;">✨ 총 합계</td>
-                    <td style="padding: 18px; font-weight: bold; color: #000;">{total_prin:,.0f}</td>
-                    <td style="padding: 18px; font-weight: bold; color: #CD2E3A;">{total_asset:,.0f}</td>
-                    <td style="padding: 18px; font-weight: bold; color: #CD2E3A;">{tot_ret:.2f}%</td>
+                <tr style="background-color: #e6f0ff; border-top: 2px solid #4a90e2; font-size: 18px;">
+                    <td colspan="2" style="padding: 15px; font-weight: bold; color: #000;">✨ 총 합계</td>
+                    <td style="padding: 15px; font-weight: bold; color: #000;">{total_prin:,.0f}</td>
+                    <td style="padding: 15px; font-weight: bold; color: #CD2E3A;">{total_asset:,.0f}</td>
+                    <td style="padding: 15px; font-weight: bold; color: #CD2E3A;">{tot_ret:.2f}%</td>
                 </tr>
                 </tbody>
             </table>
             </div>
             '''
-            
             st.markdown(html_table, unsafe_allow_html=True)
             st.markdown("<br>", unsafe_allow_html=True)
             
@@ -315,24 +323,44 @@ with tabs[0]:
         
         st.markdown("#### 📈 고객 총자산 성장 추이")
         dfs_to_merge = []
+        
+        # For the area chart, we need to calculate total asset AND total principal at each date to compute return rate
         if not c_rap.empty:
-            rap_hist = c_rap[c_rap['비고'] != '해지'].groupby('날짜')['평가자산'].sum().reset_index().rename(columns={'평가자산': '랩자산'})
+            rap_hist = c_rap[c_rap['비고'] != '해지'].groupby('날짜')[['평가자산', '투자원금']].sum().reset_index().rename(columns={'평가자산': '랩_평가', '투자원금': '랩_원금'})
             dfs_to_merge.append(rap_hist)
         if not c_pen.empty:
-            pen_hist = c_pen.groupby('날짜')['평가금액'].sum().reset_index().rename(columns={'평가금액': '연금/IRP자산'})
+            pen_hist = c_pen.groupby('날짜')[['평가금액', '납입원금']].sum().reset_index().rename(columns={'평가금액': '연금_평가', '납입원금': '연금_원금'})
             dfs_to_merge.append(pen_hist)
         if not c_stock.empty:
-            stock_hist = c_stock.groupby('날짜')['평가금액'].sum().reset_index().rename(columns={'평가금액': '주식자산'})
+            stock_hist = c_stock.groupby('날짜')[['평가금액', '투자원금']].sum().reset_index().rename(columns={'평가금액': '주식_평가', '투자원금': '주식_원금'})
             dfs_to_merge.append(stock_hist)
             
         if dfs_to_merge:
             merged = reduce(lambda left, right: pd.merge(left, right, on=['날짜'], how='outer'), dfs_to_merge)
             merged = merged.sort_values('날짜').ffill().fillna(0)
-            cols_to_sum = [c for c in merged.columns if c != '날짜']
-            merged['총자산'] = merged[cols_to_sum].sum(axis=1)
             
-            fig_trend = px.area(merged, x='날짜', y='총자산', title="날짜별 금융자산 합산 우상향 지표", color_discrete_sequence=['#CD2E3A'])
-            fig_trend.update_traces(mode='lines+markers', marker=dict(size=6))
+            eval_cols = [c for c in merged.columns if '_평가' in c]
+            prin_cols = [c for c in merged.columns if '_원금' in c]
+            
+            merged['총자산_평가'] = merged[eval_cols].sum(axis=1)
+            merged['총자산_원금'] = merged[prin_cols].sum(axis=1)
+            
+            # Calculate return rate
+            merged['수익률(%)'] = ((merged['총자산_평가'] - merged['총자산_원금']) / merged['총자산_원금']) * 100
+            merged['수익률(%)'] = merged['수익률(%)'].fillna(0)
+            
+            fig_trend = px.area(merged, x='날짜', y='총자산_평가', title="날짜별 금융자산 합산 우상향 지표", color_discrete_sequence=['#CD2E3A'])
+            fig_trend.update_traces(
+                mode='lines+markers', 
+                marker=dict(size=6),
+                hovertemplate="<b>%{x|%y년 %m월 %d일}</b><br><br>" +
+                              "<span style='font-size:16px;'>총 평가금액: %{y:,.0f}원</span><br>" +
+                              "<span style='font-size:18px; font-weight:bold; color:#1F77B4;'>총 수익률: %{customdata[0]:.2f}%</span><extra></extra>",
+                customdata=merged[['수익률(%)']]
+            )
+            # 💡 피드백 2: x축 월/연도 한글 포맷
+            fig_trend.update_xaxes(tickformat="%y년 %m월", dtick="M1") 
+            fig_trend.update_yaxes(title="총자산")
             st.plotly_chart(fig_trend, use_container_width=True)
         else:
             st.info("자산 성장 추이를 그릴 과거 날짜 데이터가 부족합니다.")
@@ -360,7 +388,6 @@ with tabs[0]:
                     c3.metric("원금대비 수익률", f"{val_prin_ret}%")
                     c4.metric("총 수익률", f"{val_tot_ret}%")
                     
-                    # 💡 무조건 그래프 노출 조건 완료
                     if "원금대비수익률(%)" in acc_df.columns:
                         color = '#888888' if status == '해지' else '#FF7F0E'
                         fig1 = px.line(acc_df, x="날짜", y="원금대비수익률(%)", markers=True, title=f"🟠 {acc} 수익률 추이")
@@ -380,7 +407,6 @@ with tabs[0]:
                     c2.metric("납입원금", f"{latest.get('납입원금', 0):,.0f}원")
                     c3.metric("총 수익률(%)", f"{latest.get('수익률(%)', 0)}%")
                     
-                    # 💡 피드백 3: 선 차트 무조건 노출
                     if "수익률(%)" in acc_df.columns:
                         fig2 = px.line(acc_df, x="날짜", y="수익률(%)", markers=True, title=f"🟢 {acc} 총 수익률 추이")
                         fig2.update_traces(line=dict(width=3, color='#2CA02C'))
@@ -406,7 +432,6 @@ with tabs[0]:
                         if cnt > 0:
                             st.caption(f"📌 보유 종목 갯수: {cnt}개")
                             
-                    # 💡 피드백 3: 선 차트 무조건 노출
                     if "수익률(%)" in acc_df.columns:
                         fig3 = px.line(acc_df, x="날짜", y="수익률(%)", markers=True, title=f"🔵 {acc} 총 수익률 추이")
                         fig3.update_traces(line=dict(width=3, color='#1F77B4'))
