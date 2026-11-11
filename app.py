@@ -31,8 +31,6 @@ if not st.session_state["authenticated"]:
 # 💡 데이터 연동 설정
 # ==========================================
 SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
-
-# 👇 본사 대표계좌 시트의 GID (기삼님이 입력해주시면 됩니다)
 REP_SHEET_GID = "" 
 PENSION_SHEET_GID = "951679806" 
 STOCK_SHEET_GID = "1558094314" 
@@ -102,6 +100,11 @@ def load_pension_data():
         df = pd.read_csv(url)
         df.columns = df.columns.str.replace(' ', '').str.strip()
         df = df.dropna(subset=['고객명'])
+        
+        if '계좌명' in df.columns:
+            df['temp_count'] = df.groupby(['고객명', '날짜', '계좌명']).cumcount() + 1
+            df['계좌명'] = df.apply(lambda x: f"{x['계좌명']}_{x['temp_count']}" if x['temp_count'] > 1 else x['계좌명'], axis=1)
+            
         cols_to_clean = ['납입원금', '평가금액', '올해납입액', '수익률(%)']
         for col in cols_to_clean:
             if col in df.columns:
@@ -123,15 +126,18 @@ def load_stock_data():
         if '원금' in df.columns and '투자원금' not in df.columns:
             df.rename(columns={'원금': '투자원금'}, inplace=True)
             
-        if '계좌명' not in df.columns:
-            df['계좌명'] = '위탁계좌'
+        # 💡 피드백 1: 같은 날짜, 같은 고객이면 '위탁계좌 1', '위탁계좌 2'로 자동 분리
+        if '날짜' in df.columns: df['날짜'] = pd.to_datetime(df['날짜'], errors='coerce')
+        
+        df['계좌순번'] = df.groupby(['고객명', '날짜']).cumcount() + 1
+        df['계좌명'] = df['계좌순번'].apply(lambda x: f"위탁계좌 {x}")
             
         cols_to_clean = ['투자원금', '평가금액', '수익률(%)', '갯수']
         for col in cols_to_clean:
             if col in df.columns:
                 df[col] = df[col].astype(str).str.replace(r'[^\d.-]', '', regex=True)
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-        if '날짜' in df.columns: df['날짜'] = pd.to_datetime(df['날짜'], errors='coerce')
+        
         return df
     except: return pd.DataFrame()
 
@@ -251,10 +257,11 @@ with tabs[0]:
         
         with col_chart:
             if not pie_data.empty:
+                # 💡 피드백 2: 도넛 차트 실선 밖으로 빼기 완료
                 fig_pie = px.pie(pie_data, values='금액', names='자산 구분', hole=0.5,
                                  color='자산 구분', color_discrete_map={'투자자산(랩)':'#1F77B4', '노후자산(연금)':'#2CA02C', '노후자산(IRP)':'#98DF8A', '위탁자산(주식)':'#FF7F0E'})
-                fig_pie.update_traces(textposition='inside', textinfo='percent+label', textfont_size=16, insidetextorientation='horizontal')
-                fig_pie.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0), height=380)
+                fig_pie.update_traces(textposition='outside', textinfo='label+percent', textfont_size=15, pull=[0.02]*len(pie_data))
+                fig_pie.update_layout(showlegend=False, margin=dict(t=30, b=30, l=30, r=30), height=400)
                 st.plotly_chart(fig_pie, use_container_width=True)
                 
         with col_detail:
@@ -353,6 +360,7 @@ with tabs[0]:
                     c3.metric("원금대비 수익률", f"{val_prin_ret}%")
                     c4.metric("총 수익률", f"{val_tot_ret}%")
                     
+                    # 💡 무조건 그래프 노출 조건 완료
                     if "원금대비수익률(%)" in acc_df.columns:
                         color = '#888888' if status == '해지' else '#FF7F0E'
                         fig1 = px.line(acc_df, x="날짜", y="원금대비수익률(%)", markers=True, title=f"🟠 {acc} 수익률 추이")
@@ -372,7 +380,8 @@ with tabs[0]:
                     c2.metric("납입원금", f"{latest.get('납입원금', 0):,.0f}원")
                     c3.metric("총 수익률(%)", f"{latest.get('수익률(%)', 0)}%")
                     
-                    if "수익률(%)" in acc_df.columns and len(acc_df) > 1:
+                    # 💡 피드백 3: 선 차트 무조건 노출
+                    if "수익률(%)" in acc_df.columns:
                         fig2 = px.line(acc_df, x="날짜", y="수익률(%)", markers=True, title=f"🟢 {acc} 총 수익률 추이")
                         fig2.update_traces(line=dict(width=3, color='#2CA02C'))
                         st.plotly_chart(fig2, use_container_width=True)
@@ -395,9 +404,10 @@ with tabs[0]:
                     if '갯수' in acc_df.columns:
                         cnt = int(latest.get('갯수', 0))
                         if cnt > 0:
-                            st.info(f"💡 보유 종목 갯수: **{cnt}개**")
+                            st.caption(f"📌 보유 종목 갯수: {cnt}개")
                             
-                    if "수익률(%)" in acc_df.columns and len(acc_df) > 1:
+                    # 💡 피드백 3: 선 차트 무조건 노출
+                    if "수익률(%)" in acc_df.columns:
                         fig3 = px.line(acc_df, x="날짜", y="수익률(%)", markers=True, title=f"🔵 {acc} 총 수익률 추이")
                         fig3.update_traces(line=dict(width=3, color='#1F77B4'))
                         st.plotly_chart(fig3, use_container_width=True)
@@ -428,4 +438,4 @@ with tabs[1]:
 # ==========================================
 with tabs[2]:
     st.header("🏢 본사 대표계좌 운용성과")
-    st.info("본사 대표계좌 성과가 표시됩니다.")
+    st.info("💡 본사 운용 성과 이미지를 채팅창에 올려주시면, 제가 엑셀 표로 바로 뽑아드리고 연동해 드리겠습니다!")
