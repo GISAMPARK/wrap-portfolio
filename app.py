@@ -35,8 +35,8 @@ SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
 REP_SHEET_GID = "" 
 PENSION_SHEET_GID = "951679806" 
 
-# 👇 나중에 시트에 '주식' 탭을 만드시고 그 GID를 여기에 넣으시면 자동 연동됩니다!
-STOCK_SHEET_GID = "" 
+# 👇 새로 만드신 위탁계좌 탭의 GID 자동 연동!
+STOCK_SHEET_GID = "1558094314" 
 
 def mask_name(name):
     name = str(name).strip()
@@ -120,7 +120,16 @@ def load_stock_data():
         df = pd.read_csv(url)
         df.columns = df.columns.str.replace(' ', '').str.strip()
         df = df.dropna(subset=['고객명'])
-        cols_to_clean = ['투자원금', '평가금액', '수익률(%)']
+        
+        # 기삼님의 '원금' 헤더를 대시보드 표준인 '투자원금'으로 자동 인식하게 변경
+        if '원금' in df.columns and '투자원금' not in df.columns:
+            df.rename(columns={'원금': '투자원금'}, inplace=True)
+            
+        # 계좌명 자동 부여
+        if '계좌명' not in df.columns:
+            df['계좌명'] = '위탁계좌'
+            
+        cols_to_clean = ['투자원금', '평가금액', '수익률(%)', '갯수']
         for col in cols_to_clean:
             if col in df.columns:
                 df[col] = df[col].astype(str).str.replace(r'[^\d.-]', '', regex=True)
@@ -236,7 +245,7 @@ with tabs[0]:
         col_chart, col_detail = st.columns([1, 1.2])
         
         pie_data = pd.DataFrame({
-            '자산 구분': ['투자자산(랩)', '노후자산(연금/IRP)', '주식자산'],
+            '자산 구분': ['투자자산(랩)', '노후자산(연금/IRP)', '위탁자산(주식)'],
             '금액': [total_rap_asset, total_pen_asset, total_stock_asset]
         })
         pie_data = pie_data[pie_data['금액'] > 0]
@@ -244,15 +253,13 @@ with tabs[0]:
         with col_chart:
             if not pie_data.empty:
                 fig_pie = px.pie(pie_data, values='금액', names='자산 구분', hole=0.5,
-                                 color='자산 구분', color_discrete_map={'투자자산(랩)':'#1F77B4', '노후자산(연금/IRP)':'#2CA02C', '주식자산':'#FF7F0E'})
+                                 color='자산 구분', color_discrete_map={'투자자산(랩)':'#1F77B4', '노후자산(연금/IRP)':'#2CA02C', '위탁자산(주식)':'#FF7F0E'})
                 fig_pie.update_traces(textposition='inside', textinfo='percent+label', textfont_size=16)
                 fig_pie.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0), height=380)
                 st.plotly_chart(fig_pie, use_container_width=True)
                 
         with col_detail:
             st.markdown("#### 📋 자산별 운용 세부 현황")
-            
-            # 💡 기존의 작은 표(DataFrame) 대신 HTML/CSS를 사용하여 크고 화려한 표로 교체!
             html_table = '''
             <div style="padding-top: 15px;">
             <table style="width: 100%; text-align: center; border-collapse: collapse; font-size: 17px; font-family: 'Malgun Gothic', sans-serif;">
@@ -277,9 +284,8 @@ with tabs[0]:
             
             if total_stock_asset > 0:
                 ret = ((total_stock_asset - total_stock_prin) / total_stock_prin * 100) if total_stock_prin else 0
-                html_table += f"<tr><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>🟧 주식</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_stock_prin:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_stock_asset:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{ret:.2f}%</td></tr>"
+                html_table += f"<tr><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>🟧 위탁(주식)</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_stock_prin:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_stock_asset:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{ret:.2f}%</td></tr>"
             
-            # 총 합계 열 (하이라이트 강조)
             tot_ret = ((total_asset - total_prin) / total_prin * 100) if total_prin else 0
             html_table += f'''
                 <tr style="background-color: #e6f0ff; border-top: 2px solid #4a90e2; font-size: 19px;">
@@ -298,7 +304,7 @@ with tabs[0]:
             
         st.markdown("---")
         
-        # 📈 자산 성장 추이 그래프 (이전 대비 우상향 지표)
+        # 📈 자산 성장 추이 그래프 
         st.markdown("#### 📈 고객 총자산 성장 추이")
         dfs_to_merge = []
         if not c_rap.empty:
@@ -326,7 +332,7 @@ with tabs[0]:
         st.markdown("---")
         
         # 📑 자산별 상세 현황 탭
-        sub_tabs = st.tabs(["📈 랩어카운트 상세", "🛡️ 연금 및 IRP 상세", "📊 주식 상세"])
+        sub_tabs = st.tabs(["📈 랩어카운트 상세", "🛡️ 연금 및 IRP 상세", "📊 위탁계좌(주식) 상세"])
         
         with sub_tabs[0]:
             if not c_rap.empty:
@@ -359,7 +365,21 @@ with tabs[0]:
             else: st.info("내역이 없습니다.")
             
         with sub_tabs[2]:
-            st.info("💡 구글 시트에 '주식' 탭을 만들고 코드를 연동하면 여기에 표시됩니다.")
+            if not c_stock.empty:
+                for acc in c_stock['계좌명'].unique():
+                    acc_df = c_stock[c_stock['계좌명'] == acc]
+                    latest = acc_df.iloc[-1]
+                    st.markdown(f"#### 📈 [{acc}]")
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("평가금액", f"{latest.get('평가금액', 0):,.0f}원")
+                    c2.metric("투자원금", f"{latest.get('투자원금', 0):,.0f}원")
+                    c3.metric("수익률(%)", f"{latest.get('수익률(%)', 0)}%")
+                    
+                    if '갯수' in acc_df.columns:
+                        st.caption(f"💡 종목 보유 갯수: {int(latest.get('갯수', 0))}개")
+                        
+                    st.markdown("<hr style='border: 1px dashed #ddd;'>", unsafe_allow_html=True)
+            else: st.info("위탁계좌 내역이 없습니다.")
     else:
         st.info("👆 위 검색창을 클릭하여 조회할 고객을 선택해 주세요.")
 
