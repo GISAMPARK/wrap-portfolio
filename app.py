@@ -223,7 +223,6 @@ with tabs[0]:
         with c_title1:
             st.markdown(f"### 💰 총 운용 금융자산: **<span style='color:#CD2E3A;'>{total_asset:,.0f}원</span>**", unsafe_allow_html=True)
         with c_title2:
-            # 세액공제 900만원 한도 표시
             tax_limit = 9000000
             progress = min(total_tax_paid / tax_limit, 1.0)
             st.markdown(f"**🛡️ 올해 연금/IRP 세액공제 납입: <span style='color:#1F77B4;'>{total_tax_paid:,.0f}원</span> / 한도 900만 원**", unsafe_allow_html=True)
@@ -246,116 +245,41 @@ with tabs[0]:
             if not pie_data.empty:
                 fig_pie = px.pie(pie_data, values='금액', names='자산 구분', hole=0.5,
                                  color='자산 구분', color_discrete_map={'투자자산(랩)':'#1F77B4', '노후자산(연금/IRP)':'#2CA02C', '주식자산':'#FF7F0E'})
-                fig_pie.update_traces(textposition='inside', textinfo='percent+label', textfont_size=15)
-                fig_pie.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0), height=350)
+                fig_pie.update_traces(textposition='inside', textinfo='percent+label', textfont_size=16)
+                fig_pie.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0), height=380)
                 st.plotly_chart(fig_pie, use_container_width=True)
                 
         with col_detail:
             st.markdown("#### 📋 자산별 운용 세부 현황")
-            detail_list = []
+            
+            # 💡 기존의 작은 표(DataFrame) 대신 HTML/CSS를 사용하여 크고 화려한 표로 교체!
+            html_table = '''
+            <div style="padding-top: 15px;">
+            <table style="width: 100%; text-align: center; border-collapse: collapse; font-size: 17px; font-family: 'Malgun Gothic', sans-serif;">
+                <thead>
+                    <tr style="background-color: #f0f2f6; border-bottom: 2px solid #ccc;">
+                        <th style="padding: 15px; font-weight: bold; color: #333;">자산 종류</th>
+                        <th style="padding: 15px; font-weight: bold; color: #333;">투자원금</th>
+                        <th style="padding: 15px; font-weight: bold; color: #333;">현재평가액</th>
+                        <th style="padding: 15px; font-weight: bold; color: #333;">수익률</th>
+                    </tr>
+                </thead>
+                <tbody>
+            '''
+            
             if total_rap_asset > 0:
                 ret = ((total_rap_asset - total_rap_prin) / total_rap_prin * 100) if total_rap_prin else 0
-                detail_list.append({"자산 종류": "🟦 랩어카운트", "투자원금": f"{total_rap_prin:,.0f}", "현재평가액": f"{total_rap_asset:,.0f}", "수익률": f"{ret:.2f}%"})
+                html_table += f"<tr><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>🟦 랩어카운트</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_rap_prin:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_rap_asset:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{ret:.2f}%</td></tr>"
+            
             if total_pen_asset > 0:
                 ret = ((total_pen_asset - total_pen_prin) / total_pen_prin * 100) if total_pen_prin else 0
-                detail_list.append({"자산 종류": "🟩 연금/IRP", "투자원금": f"{total_pen_prin:,.0f}", "현재평가액": f"{total_pen_asset:,.0f}", "수익률": f"{ret:.2f}%"})
+                html_table += f"<tr><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>🟩 연금/IRP</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_pen_prin:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_pen_asset:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{ret:.2f}%</td></tr>"
+            
             if total_stock_asset > 0:
                 ret = ((total_stock_asset - total_stock_prin) / total_stock_prin * 100) if total_stock_prin else 0
-                detail_list.append({"자산 종류": "🟧 주식", "투자원금": f"{total_stock_prin:,.0f}", "현재평가액": f"{total_stock_asset:,.0f}", "수익률": f"{ret:.2f}%"})
+                html_table += f"<tr><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>🟧 주식</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_stock_prin:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_stock_asset:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{ret:.2f}%</td></tr>"
             
-            # 총합계 추가
+            # 총 합계 열 (하이라이트 강조)
             tot_ret = ((total_asset - total_prin) / total_prin * 100) if total_prin else 0
-            detail_list.append({"자산 종류": "✨ **총 합계**", "투자원금": f"**{total_prin:,.0f}**", "현재평가액": f"**{total_asset:,.0f}**", "수익률": f"**{tot_ret:.2f}%**"})
-            
-            st.markdown(pd.DataFrame(detail_list).to_html(index=False, escape=False), unsafe_allow_html=True)
-            st.markdown("<br>", unsafe_allow_html=True)
-            
-        st.markdown("---")
-        
-        # 📈 자산 성장 추이 그래프 (이전 대비 우상향 지표)
-        st.markdown("#### 📈 고객 총자산 성장 추이")
-        dfs_to_merge = []
-        if not c_rap.empty:
-            rap_hist = c_rap[c_rap['비고'] != '해지'].groupby('날짜')['평가자산'].sum().reset_index().rename(columns={'평가자산': '랩자산'})
-            dfs_to_merge.append(rap_hist)
-        if not c_pen.empty:
-            pen_hist = c_pen.groupby('날짜')['평가금액'].sum().reset_index().rename(columns={'평가금액': '연금자산'})
-            dfs_to_merge.append(pen_hist)
-        if not c_stock.empty:
-            stock_hist = c_stock.groupby('날짜')['평가금액'].sum().reset_index().rename(columns={'평가금액': '주식자산'})
-            dfs_to_merge.append(stock_hist)
-            
-        if dfs_to_merge:
-            merged = reduce(lambda left, right: pd.merge(left, right, on=['날짜'], how='outer'), dfs_to_merge)
-            merged = merged.sort_values('날짜').ffill().fillna(0)
-            cols_to_sum = [c for c in merged.columns if c != '날짜']
-            merged['총자산'] = merged[cols_to_sum].sum(axis=1)
-            
-            fig_trend = px.area(merged, x='날짜', y='총자산', title="날짜별 금융자산 합산 우상향 지표", color_discrete_sequence=['#CD2E3A'])
-            fig_trend.update_traces(mode='lines+markers', marker=dict(size=6))
-            st.plotly_chart(fig_trend, use_container_width=True)
-        else:
-            st.info("자산 성장 추이를 그릴 과거 날짜 데이터가 부족합니다.")
-
-        st.markdown("---")
-        
-        # 📑 자산별 상세 현황 탭
-        sub_tabs = st.tabs(["📈 랩어카운트 상세", "🛡️ 연금 및 IRP 상세", "📊 주식 상세"])
-        
-        with sub_tabs[0]:
-            if not c_rap.empty:
-                for acc in c_rap['계좌명'].unique():
-                    acc_df = c_rap[c_rap['계좌명'] == acc]
-                    latest = acc_df.iloc[-1]
-                    status = str(latest.get('비고', '운용중')).strip()
-                    if status == '해지':
-                        st.markdown(f"#### 🛑 [{acc}] <span style='color:red; font-size:16px;'>(해지)</span>", unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"#### 📊 [{acc}]")
-                    c1, c2, c3 = st.columns(3)
-                    c1.metric("평가자산", f"{latest.get('평가자산', 0):,.0f}원")
-                    c2.metric("투자원금", f"{latest.get('투자원금', 0):,.0f}원")
-                    c3.metric("총 수익률", f"{latest.get('수익률(%)', 0)}%")
-                    st.markdown("<hr style='border: 1px dashed #ddd;'>", unsafe_allow_html=True)
-            else: st.info("내역이 없습니다.")
-                
-        with sub_tabs[1]:
-            if not c_pen.empty:
-                for acc in c_pen['계좌명'].unique():
-                    acc_df = c_pen[c_pen['계좌명'] == acc]
-                    latest = acc_df.iloc[-1]
-                    st.markdown(f"#### 🛡️ [{acc}]")
-                    c1, c2, c3 = st.columns(3)
-                    c1.metric("평가금액", f"{latest.get('평가금액', 0):,.0f}원")
-                    c2.metric("납입원금", f"{latest.get('납입원금', 0):,.0f}원")
-                    c3.metric("수익률(%)", f"{latest.get('수익률(%)', 0)}%")
-                    st.markdown("<hr style='border: 1px dashed #ddd;'>", unsafe_allow_html=True)
-            else: st.info("내역이 없습니다.")
-            
-        with sub_tabs[2]:
-            st.info("💡 구글 시트에 '주식' 탭을 만들고 코드를 연동하면 여기에 표시됩니다.")
-    else:
-        st.info("👆 위 검색창을 클릭하여 조회할 고객을 선택해 주세요.")
-
-# ==========================================
-# 2️⃣ 두 번째 탭: 랩어카운트 전체 요약
-# ==========================================
-with tabs[1]:
-    st.header("🏆 가입 연도 및 투자 종류별 평균 수익률")
-    if not df_rap.empty and '수익률(%)' in df_rap.columns:
-        active_df = df_rap[df_rap['비고'] != '해지'].copy()
-        if not active_df.empty:
-            latest_df = active_df.sort_values('날짜').groupby(['고객명', '계좌명']).tail(1).copy()
-            if '투자시작일' in latest_df.columns:
-                latest_df['가입연도'] = latest_df['투자시작일'].astype(str).str.strip().str[:4] + "년"
-                yearly_avg = latest_df.groupby(['가입연도', '계좌명'])[['원금대비수익률(%)', '수익률(%)']].mean().reset_index().round(2)
-                st.dataframe(yearly_avg, use_container_width=True)
-            else: st.warning("투자시작일 데이터가 필요합니다.")
-        else: st.info("현재 운용중인 데이터가 없습니다.")
-
-# ==========================================
-# 3️⃣ 세 번째 탭: 본사 대표 운용성과
-# ==========================================
-with tabs[2]:
-    st.header("🏢 본사 대표계좌 운용성과")
-    st.info("본사 대표계좌 성과가 표시됩니다.")
+            html_table += f'''
+                <tr style="background-
