@@ -32,10 +32,9 @@ if not st.session_state["authenticated"]:
 # ==========================================
 SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
 
+# 👇 본사 대표계좌 시트의 GID (기삼님이 입력해주시면 됩니다)
 REP_SHEET_GID = "" 
 PENSION_SHEET_GID = "951679806" 
-
-# 👇 새로 만드신 위탁계좌 탭의 GID 자동 연동!
 STOCK_SHEET_GID = "1558094314" 
 
 def mask_name(name):
@@ -121,11 +120,9 @@ def load_stock_data():
         df.columns = df.columns.str.replace(' ', '').str.strip()
         df = df.dropna(subset=['고객명'])
         
-        # 기삼님의 '원금' 헤더를 대시보드 표준인 '투자원금'으로 자동 인식하게 변경
         if '원금' in df.columns and '투자원금' not in df.columns:
             df.rename(columns={'원금': '투자원금'}, inplace=True)
             
-        # 계좌명 자동 부여
         if '계좌명' not in df.columns:
             df['계좌명'] = '위탁계좌'
             
@@ -190,12 +187,12 @@ with tabs[0]:
         
         total_rap_asset, total_rap_prin = 0, 0
         total_pen_asset, total_pen_prin, total_tax_paid = 0, 0, 0
+        total_irp_asset, total_irp_prin, total_irp_tax_paid = 0, 0, 0 
         total_stock_asset, total_stock_prin = 0, 0
         
         active_rap_accounts = []
         terminated_rap_accounts = []
         
-        # 랩어카운트 집계
         if not c_rap.empty:
             for acc in c_rap['계좌명'].unique():
                 acc_df = c_rap[c_rap['계좌명'] == acc]
@@ -207,25 +204,27 @@ with tabs[0]:
                     total_rap_asset += latest.get('평가자산', 0)
                     total_rap_prin += latest.get('투자원금', 0)
                     
-        # 연금/IRP 집계
         if not c_pen.empty:
             for acc in c_pen['계좌명'].unique():
                 latest = c_pen[c_pen['계좌명'] == acc].iloc[-1]
-                total_pen_asset += latest.get('평가금액', 0)
-                total_pen_prin += latest.get('납입원금', 0)
-                total_tax_paid += latest.get('올해납입액', 0)
+                if 'IRP' in str(acc).upper():
+                    total_irp_asset += latest.get('평가금액', 0)
+                    total_irp_prin += latest.get('납입원금', 0)
+                    total_irp_tax_paid += latest.get('올해납입액', 0)
+                else:
+                    total_pen_asset += latest.get('평가금액', 0)
+                    total_pen_prin += latest.get('납입원금', 0)
+                    total_tax_paid += latest.get('올해납입액', 0)
                 
-        # 주식 집계
         if not c_stock.empty:
             for acc in c_stock['계좌명'].unique():
                 latest = c_stock[c_stock['계좌명'] == acc].iloc[-1]
                 total_stock_asset += latest.get('평가금액', 0)
                 total_stock_prin += latest.get('투자원금', 0)
                 
-        total_asset = total_rap_asset + total_pen_asset + total_stock_asset
-        total_prin = total_rap_prin + total_pen_prin + total_stock_prin
+        total_asset = total_rap_asset + total_pen_asset + total_irp_asset + total_stock_asset
+        total_prin = total_rap_prin + total_pen_prin + total_irp_prin + total_stock_prin
         
-        # 👑 상단 요약 및 세액공제
         st.markdown(f"## 👑 {safe_client_name} 고객님 종합 자산 브리핑")
         
         c_title1, c_title2 = st.columns([1, 1])
@@ -233,28 +232,28 @@ with tabs[0]:
             st.markdown(f"### 💰 총 운용 금융자산: **<span style='color:#CD2E3A;'>{total_asset:,.0f}원</span>**", unsafe_allow_html=True)
         with c_title2:
             tax_limit = 9000000
-            progress = min(total_tax_paid / tax_limit, 1.0)
-            st.markdown(f"**🛡️ 올해 연금/IRP 세액공제 납입: <span style='color:#1F77B4;'>{total_tax_paid:,.0f}원</span> / 한도 900만 원**", unsafe_allow_html=True)
+            total_tax_all = total_tax_paid + total_irp_tax_paid
+            progress = min(total_tax_all / tax_limit, 1.0)
+            st.markdown(f"**🛡️ 올해 연금/IRP 세액공제 납입: <span style='color:#1F77B4;'>{total_tax_all:,.0f}원</span> / 한도 900만 원**", unsafe_allow_html=True)
             st.progress(progress)
             
         if terminated_rap_accounts:
             st.warning(f"🛑 해지된 랩어카운트 내역이 존재하여 위 자산 합산에서는 제외되었습니다.")
         st.markdown("---")
         
-        # 📊 도넛 차트 & 자산별 상세 표 (좌/우 배치)
         col_chart, col_detail = st.columns([1, 1.2])
         
         pie_data = pd.DataFrame({
-            '자산 구분': ['투자자산(랩)', '노후자산(연금/IRP)', '위탁자산(주식)'],
-            '금액': [total_rap_asset, total_pen_asset, total_stock_asset]
+            '자산 구분': ['투자자산(랩)', '노후자산(연금)', '노후자산(IRP)', '위탁자산(주식)'],
+            '금액': [total_rap_asset, total_pen_asset, total_irp_asset, total_stock_asset]
         })
         pie_data = pie_data[pie_data['금액'] > 0]
         
         with col_chart:
             if not pie_data.empty:
                 fig_pie = px.pie(pie_data, values='금액', names='자산 구분', hole=0.5,
-                                 color='자산 구분', color_discrete_map={'투자자산(랩)':'#1F77B4', '노후자산(연금/IRP)':'#2CA02C', '위탁자산(주식)':'#FF7F0E'})
-                fig_pie.update_traces(textposition='inside', textinfo='percent+label', textfont_size=16)
+                                 color='자산 구분', color_discrete_map={'투자자산(랩)':'#1F77B4', '노후자산(연금)':'#2CA02C', '노후자산(IRP)':'#98DF8A', '위탁자산(주식)':'#FF7F0E'})
+                fig_pie.update_traces(textposition='inside', textinfo='percent+label', textfont_size=16, insidetextorientation='horizontal')
                 fig_pie.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0), height=380)
                 st.plotly_chart(fig_pie, use_container_width=True)
                 
@@ -273,14 +272,17 @@ with tabs[0]:
                 </thead>
                 <tbody>
             '''
-            
             if total_rap_asset > 0:
                 ret = ((total_rap_asset - total_rap_prin) / total_rap_prin * 100) if total_rap_prin else 0
                 html_table += f"<tr><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>🟦 랩어카운트</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_rap_prin:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_rap_asset:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{ret:.2f}%</td></tr>"
             
             if total_pen_asset > 0:
                 ret = ((total_pen_asset - total_pen_prin) / total_pen_prin * 100) if total_pen_prin else 0
-                html_table += f"<tr><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>🟩 연금/IRP</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_pen_prin:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_pen_asset:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{ret:.2f}%</td></tr>"
+                html_table += f"<tr><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>🟩 연금저축</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_pen_prin:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_pen_asset:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{ret:.2f}%</td></tr>"
+
+            if total_irp_asset > 0:
+                ret = ((total_irp_asset - total_irp_prin) / total_irp_prin * 100) if total_irp_prin else 0
+                html_table += f"<tr><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>🟩 IRP</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_irp_prin:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{total_irp_asset:,.0f}</td><td style='padding: 15px; border-bottom: 1px solid #eaeaea;'>{ret:.2f}%</td></tr>"
             
             if total_stock_asset > 0:
                 ret = ((total_stock_asset - total_stock_prin) / total_stock_prin * 100) if total_stock_prin else 0
@@ -304,14 +306,13 @@ with tabs[0]:
             
         st.markdown("---")
         
-        # 📈 자산 성장 추이 그래프 
         st.markdown("#### 📈 고객 총자산 성장 추이")
         dfs_to_merge = []
         if not c_rap.empty:
             rap_hist = c_rap[c_rap['비고'] != '해지'].groupby('날짜')['평가자산'].sum().reset_index().rename(columns={'평가자산': '랩자산'})
             dfs_to_merge.append(rap_hist)
         if not c_pen.empty:
-            pen_hist = c_pen.groupby('날짜')['평가금액'].sum().reset_index().rename(columns={'평가금액': '연금자산'})
+            pen_hist = c_pen.groupby('날짜')['평가금액'].sum().reset_index().rename(columns={'평가금액': '연금/IRP자산'})
             dfs_to_merge.append(pen_hist)
         if not c_stock.empty:
             stock_hist = c_stock.groupby('날짜')['평가금액'].sum().reset_index().rename(columns={'평가금액': '주식자산'})
@@ -331,7 +332,6 @@ with tabs[0]:
 
         st.markdown("---")
         
-        # 📑 자산별 상세 현황 탭
         sub_tabs = st.tabs(["📈 랩어카운트 상세", "🛡️ 연금 및 IRP 상세", "📊 위탁계좌(주식) 상세"])
         
         with sub_tabs[0]:
@@ -344,10 +344,20 @@ with tabs[0]:
                         st.markdown(f"#### 🛑 [{acc}] <span style='color:red; font-size:16px;'>(해지)</span>", unsafe_allow_html=True)
                     else:
                         st.markdown(f"#### 📊 [{acc}]")
-                    c1, c2, c3 = st.columns(3)
+                    c1, c2, c3, c4 = st.columns(4)
                     c1.metric("평가자산", f"{latest.get('평가자산', 0):,.0f}원")
                     c2.metric("투자원금", f"{latest.get('투자원금', 0):,.0f}원")
-                    c3.metric("총 수익률", f"{latest.get('수익률(%)', 0)}%")
+                    
+                    val_tot_ret = latest.get('수익률(%)', 0)
+                    val_prin_ret = latest.get('원금대비수익률(%)', val_tot_ret) 
+                    c3.metric("원금대비 수익률", f"{val_prin_ret}%")
+                    c4.metric("총 수익률", f"{val_tot_ret}%")
+                    
+                    if "원금대비수익률(%)" in acc_df.columns:
+                        color = '#888888' if status == '해지' else '#FF7F0E'
+                        fig1 = px.line(acc_df, x="날짜", y="원금대비수익률(%)", markers=True, title=f"🟠 {acc} 수익률 추이")
+                        fig1.update_traces(line=dict(width=3, color=color))
+                        st.plotly_chart(fig1, use_container_width=True)
                     st.markdown("<hr style='border: 1px dashed #ddd;'>", unsafe_allow_html=True)
             else: st.info("내역이 없습니다.")
                 
@@ -360,7 +370,13 @@ with tabs[0]:
                     c1, c2, c3 = st.columns(3)
                     c1.metric("평가금액", f"{latest.get('평가금액', 0):,.0f}원")
                     c2.metric("납입원금", f"{latest.get('납입원금', 0):,.0f}원")
-                    c3.metric("수익률(%)", f"{latest.get('수익률(%)', 0)}%")
+                    c3.metric("총 수익률(%)", f"{latest.get('수익률(%)', 0)}%")
+                    
+                    if "수익률(%)" in acc_df.columns and len(acc_df) > 1:
+                        fig2 = px.line(acc_df, x="날짜", y="수익률(%)", markers=True, title=f"🟢 {acc} 총 수익률 추이")
+                        fig2.update_traces(line=dict(width=3, color='#2CA02C'))
+                        st.plotly_chart(fig2, use_container_width=True)
+                        
                     st.markdown("<hr style='border: 1px dashed #ddd;'>", unsafe_allow_html=True)
             else: st.info("내역이 없습니다.")
             
@@ -370,13 +386,21 @@ with tabs[0]:
                     acc_df = c_stock[c_stock['계좌명'] == acc]
                     latest = acc_df.iloc[-1]
                     st.markdown(f"#### 📈 [{acc}]")
+                    
                     c1, c2, c3 = st.columns(3)
                     c1.metric("평가금액", f"{latest.get('평가금액', 0):,.0f}원")
                     c2.metric("투자원금", f"{latest.get('투자원금', 0):,.0f}원")
-                    c3.metric("수익률(%)", f"{latest.get('수익률(%)', 0)}%")
+                    c3.metric("총 수익률(%)", f"{latest.get('수익률(%)', 0)}%")
                     
                     if '갯수' in acc_df.columns:
-                        st.caption(f"💡 종목 보유 갯수: {int(latest.get('갯수', 0))}개")
+                        cnt = int(latest.get('갯수', 0))
+                        if cnt > 0:
+                            st.info(f"💡 보유 종목 갯수: **{cnt}개**")
+                            
+                    if "수익률(%)" in acc_df.columns and len(acc_df) > 1:
+                        fig3 = px.line(acc_df, x="날짜", y="수익률(%)", markers=True, title=f"🔵 {acc} 총 수익률 추이")
+                        fig3.update_traces(line=dict(width=3, color='#1F77B4'))
+                        st.plotly_chart(fig3, use_container_width=True)
                         
                     st.markdown("<hr style='border: 1px dashed #ddd;'>", unsafe_allow_html=True)
             else: st.info("위탁계좌 내역이 없습니다.")
