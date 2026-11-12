@@ -214,7 +214,8 @@ with col_us:
     u2.metric(label="나스닥", value=f"{market_data['나스닥'][0]:,.2f}", delta=f"{market_data['나스닥'][1]:.2f}%")
 st.markdown("---")
 
-tab_titles = ["🔍 VVIP 고객 포트폴리오 검색", "🏆 랩어카운트 전체 요약", "🏢 본사 대표계좌 운용성과"]
+# 💡 피드백 1: 탭 이름 변경 (랩어카운트 평균수익률)
+tab_titles = ["🔍 VVIP 고객 포트폴리오 검색", "🏆 랩어카운트 평균수익률", "🏢 본사 대표계좌 운용성과"]
 tabs = st.tabs(tab_titles)
 
 with tabs[0]:
@@ -364,22 +365,17 @@ with tabs[0]:
             
         st.markdown("---")
         
-        # 💡 피드백 완벽 반영: 데이터 기입 누락이나 중복 기입으로 인해 
-        # 자산이 이상하게 요동치거나 뻥튀기(4억) 되는 현상을 완벽하게 차단합니다!
         st.markdown("#### 📈 고객 총자산 성장 추이")
         
         def get_clean_history(df, eval_col, prin_col):
             df_clean = df.dropna(subset=['날짜']).copy()
             if df_clean.empty: return pd.DataFrame()
             
-            # 해지된 계좌는 0원으로 처리해서 이력 반영 방지
             if '비고' in df_clean.columns:
                 mask = df_clean['비고'].astype(str).str.strip() == '해지'
                 df_clean.loc[mask, eval_col] = 0
                 df_clean.loc[mask, prin_col] = 0
             
-            # 피벗을 통해 각 계좌별로 누락된 날짜는 직전 금액(ffill)으로 꼼꼼히 메워주고, 
-            # 중복 날짜는 마지막(최신) 데이터 1개만 인정(last)하여 뻥튀기를 원천 차단합니다!
             p_eval = df_clean.pivot_table(index='날짜', columns='계좌명', values=eval_col, aggfunc='last').ffill().fillna(0)
             p_prin = df_clean.pivot_table(index='날짜', columns='계좌명', values=prin_col, aggfunc='last').ffill().fillna(0)
             
@@ -419,7 +415,6 @@ with tabs[0]:
             merged['총자산_평가'] = merged[eval_cols].sum(axis=1)
             merged['총자산_원금'] = merged[prin_cols].sum(axis=1)
             
-            # 수학적 오류(0으로 나누기) 방지
             merged['수익률(%)'] = 0.0
             mask = merged['총자산_원금'] > 0
             merged.loc[mask, '수익률(%)'] = ((merged.loc[mask, '총자산_평가'] - merged.loc[mask, '총자산_원금']) / merged.loc[mask, '총자산_원금']) * 100
@@ -521,7 +516,7 @@ with tabs[0]:
         st.info("👆 위 검색창을 클릭하여 조회할 고객을 선택해 주세요.")
 
 # ==========================================
-# 2️⃣ 두 번째 탭: 랩어카운트 전체 요약
+# 2️⃣ 두 번째 탭: 랩어카운트 평균수익률
 # ==========================================
 with tabs[1]:
     st.header("🏆 가입 연도 및 투자 종류별 평균 수익률")
@@ -534,7 +529,61 @@ with tabs[1]:
                     latest_df['가입연도'] = latest_df['투자시작일'].astype(str).str.strip().str[:4] + "년"
                     cols_to_mean = [c for c in ['원금대비수익률(%)', '수익률(%)'] if c in latest_df.columns]
                     yearly_avg = latest_df.groupby(['가입연도', '계좌명'])[cols_to_mean].mean().reset_index().round(2)
-                    st.dataframe(yearly_avg, use_container_width=True)
+                    
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    
+                    # 💡 피드백 2 완벽 반영: 연도별/국내미국 시각화 인포그래픽 막대그래프
+                    fig_bar = px.bar(
+                        yearly_avg, 
+                        x='가입연도', 
+                        y='수익률(%)', 
+                        color='계좌명', 
+                        barmode='group',
+                        text='수익률(%)',
+                        color_discrete_map={'미국투자': '#1F77B4', '국내투자': '#FF7F0E'},
+                        title="📊 연도별 랩어카운트 평균 수익률 시각화"
+                    )
+                    fig_bar.update_traces(texttemplate='%{text}%', textposition='outside')
+                    fig_bar.update_layout(height=450, hoverlabel=dict(font_size=16), yaxis_title="평균 수익률(%)")
+                    st.plotly_chart(fig_bar, use_container_width=True)
+                    
+                    st.markdown("<hr style='border: 1px dashed #ddd;'>", unsafe_allow_html=True)
+                    st.markdown("#### 📌 상세 수익률 현황 (미국 vs 국내)")
+                    
+                    # 💡 피드백 2 완벽 반영: 미국/국내 인포그래픽 분리 표
+                    us_df = yearly_avg[yearly_avg['계좌명'].str.contains('미국')].copy()
+                    kr_df = yearly_avg[yearly_avg['계좌명'].str.contains('국내')].copy()
+                    
+                    col_us, col_kr = st.columns(2)
+                    
+                    with col_us:
+                        st.markdown("##### 🇺🇸 미국투자 평균 수익률")
+                        if not us_df.empty:
+                            us_html = "<table style='width: 100%; text-align: center; border-collapse: collapse; font-size: 16px;'>"
+                            us_html += "<tr style='background-color: #e6f2ff; border-bottom: 2px solid #1F77B4;'><th>가입연도</th><th>원금대비수익률</th><th>총 수익률</th></tr>"
+                            for _, row in us_df.iterrows():
+                                val1 = row.get('원금대비수익률(%)', row['수익률(%)'])
+                                val2 = row['수익률(%)']
+                                us_html += f"<tr><td style='padding: 12px; border-bottom: 1px solid #ddd;'><b>{row['가입연도']}</b></td><td style='padding: 12px; border-bottom: 1px solid #ddd; color: #CD2E3A;'>{val1:.2f}%</td><td style='padding: 12px; border-bottom: 1px solid #ddd; color: #CD2E3A; font-weight: bold; font-size: 18px;'>{val2:.2f}%</td></tr>"
+                            us_html += "</table>"
+                            st.markdown(us_html, unsafe_allow_html=True)
+                        else:
+                            st.info("미국투자 데이터가 없습니다.")
+                            
+                    with col_kr:
+                        st.markdown("##### 🇰🇷 국내투자 평균 수익률")
+                        if not kr_df.empty:
+                            kr_html = "<table style='width: 100%; text-align: center; border-collapse: collapse; font-size: 16px;'>"
+                            kr_html += "<tr style='background-color: #fff0e6; border-bottom: 2px solid #FF7F0E;'><th>가입연도</th><th>원금대비수익률</th><th>총 수익률</th></tr>"
+                            for _, row in kr_df.iterrows():
+                                val1 = row.get('원금대비수익률(%)', row['수익률(%)'])
+                                val2 = row['수익률(%)']
+                                kr_html += f"<tr><td style='padding: 12px; border-bottom: 1px solid #ddd;'><b>{row['가입연도']}</b></td><td style='padding: 12px; border-bottom: 1px solid #ddd; color: #CD2E3A;'>{val1:.2f}%</td><td style='padding: 12px; border-bottom: 1px solid #ddd; color: #CD2E3A; font-weight: bold; font-size: 18px;'>{val2:.2f}%</td></tr>"
+                            kr_html += "</table>"
+                            st.markdown(kr_html, unsafe_allow_html=True)
+                        else:
+                            st.info("국내투자 데이터가 없습니다.")
+
                 else:
                     st.warning("투자시작일 데이터가 필요합니다.")
             else:
