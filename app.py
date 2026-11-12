@@ -4,8 +4,13 @@ import plotly.express as px
 import yfinance as yf
 from functools import reduce
 
-st.set_page_config(layout="wide", page_title="자산관리 대시보드", page_icon="logo.png")
+st.set_page_config(layout="wide", page_title="VVIP 종합 자산관리 대시보드", page_icon="logo.png")
 
+# 👇 스마트폰 바탕화면 앱 아이콘 강제 적용을 위한 HTML 주입 👇
+st.markdown("""
+    <link rel="apple-touch-icon" href="logo.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="logo.png">
+""", unsafe_allow_html=True)
 # ==========================================
 # 🔒 프라이빗 보안: 비밀번호 잠금 기능
 # ==========================================
