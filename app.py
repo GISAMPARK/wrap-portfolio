@@ -59,12 +59,15 @@ def get_market_indices():
             data[name] = (0, 0)
     return data
 
+# ==========================================
+# 🛡️ 데이터 로드 함수들
+# ==========================================
 @st.cache_data(ttl=60)
 def load_rep_data():
     if not REP_SHEET_GID: return pd.DataFrame()
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={REP_SHEET_GID}"
     try:
-        df = pd.read_csv(url)
+        df = pd.read_csv(url, on_bad_lines='skip')
         if df.empty or (len(df.columns) > 0 and '<html' in str(df.columns[0]).lower()): return pd.DataFrame()
         
         df.columns = [str(c).replace('\n', '').strip() for c in df.columns]
@@ -96,7 +99,7 @@ def load_rep_data():
 def load_rap_data():
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={RAP_SHEET_GID}"
     try:
-        df = pd.read_csv(url)
+        df = pd.read_csv(url, on_bad_lines='skip')
         if df.empty or (len(df.columns) > 0 and '<html' in str(df.columns[0]).lower()): return pd.DataFrame()
         
         df.columns = [str(c).replace(' ', '').strip() for c in df.columns]
@@ -128,7 +131,7 @@ def load_pension_data():
     if not PENSION_SHEET_GID: return pd.DataFrame()
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={PENSION_SHEET_GID}"
     try:
-        df = pd.read_csv(url)
+        df = pd.read_csv(url, on_bad_lines='skip')
         if df.empty or (len(df.columns) > 0 and '<html' in str(df.columns[0]).lower()): return pd.DataFrame()
         
         df.columns = [str(c).replace(' ', '').strip() for c in df.columns]
@@ -158,7 +161,7 @@ def load_stock_data():
     if not STOCK_SHEET_GID: return pd.DataFrame()
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={STOCK_SHEET_GID}"
     try:
-        df = pd.read_csv(url)
+        df = pd.read_csv(url, on_bad_lines='skip')
         if df.empty or (len(df.columns) > 0 and '<html' in str(df.columns[0]).lower()): return pd.DataFrame()
         
         df.columns = [str(c).replace(' ', '').strip() for c in df.columns]
@@ -214,7 +217,6 @@ with col_us:
     u2.metric(label="나스닥", value=f"{market_data['나스닥'][0]:,.2f}", delta=f"{market_data['나스닥'][1]:.2f}%")
 st.markdown("---")
 
-# 💡 피드백 1: 탭 이름 변경 (랩어카운트 평균수익률)
 tab_titles = ["🔍 VVIP 고객 포트폴리오 검색", "🏆 랩어카운트 평균수익률", "🏢 본사 대표계좌 운용성과"]
 tabs = st.tabs(tab_titles)
 
@@ -442,13 +444,15 @@ with tabs[0]:
         with sub_tabs[0]:
             if not c_rap.empty:
                 for acc in c_rap['계좌명'].unique():
-                    acc_df = c_rap[c_rap['계좌명'] == acc]
+                    acc_df = c_rap[c_rap['계좌명'] == acc].copy()
                     latest = acc_df.iloc[-1]
                     status = str(latest.get('비고', '운용중')).strip()
+                    
                     if status == '해지':
                         st.markdown(f"#### 🛑 [{acc}] <span style='color:red; font-size:16px;'>(해지)</span>", unsafe_allow_html=True)
                     else:
                         st.markdown(f"#### 📊 [{acc}]")
+                        
                     c1, c2, c3, c4 = st.columns(4)
                     c1.metric("평가자산", f"{latest.get('평가자산', 0):,.0f}원")
                     c2.metric("투자원금", f"{latest.get('투자원금', 0):,.0f}원")
@@ -457,6 +461,20 @@ with tabs[0]:
                     val_prin_ret = latest.get('원금대비수익률(%)', val_tot_ret) 
                     c3.metric("원금대비 수익률", f"{val_prin_ret}%")
                     c4.metric("총 수익률", f"{val_tot_ret}%")
+                    
+                    # 💡 피드백 반영: 잃어버렸던 '정산수익금' 아코디언(화살표) 메뉴 완벽 복구!
+                    if '정산수익금' in acc_df.columns and acc_df['정산수익금'].sum() > 0:
+                        with st.expander(f"💵 {acc} 연도별 정산수익금 내역 보기"):
+                            acc_df_settle = acc_df[acc_df['정산수익금'] > 0].copy()
+                            acc_df_settle['연도'] = acc_df_settle['날짜'].dt.year.astype(str) + "년"
+                            yearly_settle = acc_df_settle.groupby('연도')['정산수익금'].sum().reset_index()
+                            
+                            settle_html = "<table style='width: 100%; text-align: center; border-collapse: collapse; font-size: 16px;'>"
+                            settle_html += "<tr style='background-color: #f0f2f6; border-bottom: 2px solid #ccc;'><th>정산 연도</th><th>정산수익금 합계</th></tr>"
+                            for _, row in yearly_settle.iterrows():
+                                settle_html += f"<tr><td style='padding: 10px; border-bottom: 1px solid #eaeaea;'>{row['연도']}</td><td style='padding: 10px; border-bottom: 1px solid #eaeaea; color: #CD2E3A; font-weight: bold;'>{row['정산수익금']:,.0f}원</td></tr>"
+                            settle_html += "</table><br>"
+                            st.markdown(settle_html, unsafe_allow_html=True)
                     
                     if "원금대비수익률(%)" in acc_df.columns:
                         color = '#888888' if status == '해지' else '#FF7F0E'
@@ -532,7 +550,6 @@ with tabs[1]:
                     
                     st.markdown("<br>", unsafe_allow_html=True)
                     
-                    # 💡 피드백 2 완벽 반영: 연도별/국내미국 시각화 인포그래픽 막대그래프
                     fig_bar = px.bar(
                         yearly_avg, 
                         x='가입연도', 
@@ -550,7 +567,6 @@ with tabs[1]:
                     st.markdown("<hr style='border: 1px dashed #ddd;'>", unsafe_allow_html=True)
                     st.markdown("#### 📌 상세 수익률 현황 (미국 vs 국내)")
                     
-                    # 💡 피드백 2 완벽 반영: 미국/국내 인포그래픽 분리 표
                     us_df = yearly_avg[yearly_avg['계좌명'].str.contains('미국')].copy()
                     kr_df = yearly_avg[yearly_avg['계좌명'].str.contains('국내')].copy()
                     
