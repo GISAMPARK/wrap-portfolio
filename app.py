@@ -4,7 +4,7 @@ import plotly.express as px
 import yfinance as yf
 from functools import reduce
 
-st.set_page_config(layout="wide", page_title="VVIP 종합 자산관리 대시보드")
+st.set_page_config(layout="wide", page_title="자산관리 대시보드", page_icon="logo.png")
 
 # ==========================================
 # 🔒 프라이빗 보안: 비밀번호 잠금 기능
