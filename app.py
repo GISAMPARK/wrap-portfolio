@@ -28,7 +28,7 @@ if not st.session_state["authenticated"]:
     st.stop()  
 
 # ==========================================
-# 💡 데이터 연동 설정 (탭 고유 GID 완벽 고정)
+# 💡 데이터 연동 설정
 # ==========================================
 SHEET_ID = "1kQGu9NH2iKmBTYDMTEHxxlPnTIFOEoTyB9fN6Cf-gek"
 
@@ -59,15 +59,11 @@ def get_market_indices():
             data[name] = (0, 0)
     return data
 
-# ==========================================
-# 🛡️ 튕김 방지 처리 완료된 데이터 로드 함수들
-# ==========================================
 @st.cache_data(ttl=60)
 def load_rep_data():
     if not REP_SHEET_GID: return pd.DataFrame()
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={REP_SHEET_GID}"
     try:
-        # 💡 에러 원인이던 on_bad_lines 옵션을 완벽히 제거했습니다!
         df = pd.read_csv(url)
         if df.empty or (len(df.columns) > 0 and '<html' in str(df.columns[0]).lower()): return pd.DataFrame()
         
@@ -201,7 +197,7 @@ df_stock = load_stock_data()
 rep_df = load_rep_data()
 
 if df_rap.empty and df_pen.empty and df_stock.empty:
-    st.error("🚨 데이터를 불러올 수 없습니다! 구글 시트 내부에 예상치 못한 기호나 줄이 포함되어 서버 에러가 발생했거나 권한이 막혀있습니다.")
+    st.error("🚨 데이터를 불러올 수 없습니다! 구글 시트 우측 상단 [공유] 버튼을 눌러 **'링크가 있는 모든 사용자(뷰어)'**로 다시 변경해 주세요!")
 
 st.markdown("---")
 market_data = get_market_indices()
@@ -368,18 +364,50 @@ with tabs[0]:
             
         st.markdown("---")
         
+        # 💡 피드백 완벽 반영: 데이터 기입 누락이나 중복 기입으로 인해 
+        # 자산이 이상하게 요동치거나 뻥튀기(4억) 되는 현상을 완벽하게 차단합니다!
         st.markdown("#### 📈 고객 총자산 성장 추이")
-        dfs_to_merge = []
         
+        def get_clean_history(df, eval_col, prin_col):
+            df_clean = df.dropna(subset=['날짜']).copy()
+            if df_clean.empty: return pd.DataFrame()
+            
+            # 해지된 계좌는 0원으로 처리해서 이력 반영 방지
+            if '비고' in df_clean.columns:
+                mask = df_clean['비고'].astype(str).str.strip() == '해지'
+                df_clean.loc[mask, eval_col] = 0
+                df_clean.loc[mask, prin_col] = 0
+            
+            # 피벗을 통해 각 계좌별로 누락된 날짜는 직전 금액(ffill)으로 꼼꼼히 메워주고, 
+            # 중복 날짜는 마지막(최신) 데이터 1개만 인정(last)하여 뻥튀기를 원천 차단합니다!
+            p_eval = df_clean.pivot_table(index='날짜', columns='계좌명', values=eval_col, aggfunc='last').ffill().fillna(0)
+            p_prin = df_clean.pivot_table(index='날짜', columns='계좌명', values=prin_col, aggfunc='last').ffill().fillna(0)
+            
+            res = pd.DataFrame({
+                '날짜': p_eval.index,
+                f'{eval_col}_sum': p_eval.sum(axis=1).values,
+                f'{prin_col}_sum': p_prin.sum(axis=1).values
+            })
+            return res
+
+        dfs_to_merge = []
         if not c_rap.empty:
-            rap_hist = c_rap[c_rap['비고'] != '해지'].groupby('날짜')[['평가자산', '투자원금']].sum().reset_index().rename(columns={'평가자산': '랩_평가', '투자원금': '랩_원금'})
-            dfs_to_merge.append(rap_hist)
+            rap_hist = get_clean_history(c_rap, '평가자산', '투자원금')
+            if not rap_hist.empty:
+                rap_hist.rename(columns={'평가자산_sum': '랩_평가', '투자원금_sum': '랩_원금'}, inplace=True)
+                dfs_to_merge.append(rap_hist)
+                
         if not c_pen.empty:
-            pen_hist = c_pen.groupby('날짜')[['평가금액', '납입원금']].sum().reset_index().rename(columns={'평가금액': '연금_평가', '납입원금': '연금_원금'})
-            dfs_to_merge.append(pen_hist)
+            pen_hist = get_clean_history(c_pen, '평가금액', '납입원금')
+            if not pen_hist.empty:
+                pen_hist.rename(columns={'평가금액_sum': '연금_평가', '납입원금_sum': '연금_원금'}, inplace=True)
+                dfs_to_merge.append(pen_hist)
+                
         if not c_stock.empty:
-            stock_hist = c_stock.groupby('날짜')[['평가금액', '투자원금']].sum().reset_index().rename(columns={'평가금액': '주식_평가', '투자원금': '주식_원금'})
-            dfs_to_merge.append(stock_hist)
+            stock_hist = get_clean_history(c_stock, '평가금액', '투자원금')
+            if not stock_hist.empty:
+                stock_hist.rename(columns={'평가금액_sum': '주식_평가', '투자원금_sum': '주식_원금'}, inplace=True)
+                dfs_to_merge.append(stock_hist)
             
         if dfs_to_merge:
             merged = reduce(lambda left, right: pd.merge(left, right, on=['날짜'], how='outer'), dfs_to_merge)
@@ -391,8 +419,10 @@ with tabs[0]:
             merged['총자산_평가'] = merged[eval_cols].sum(axis=1)
             merged['총자산_원금'] = merged[prin_cols].sum(axis=1)
             
-            merged['수익률(%)'] = ((merged['총자산_평가'] - merged['총자산_원금']) / merged['총자산_원금']) * 100
-            merged['수익률(%)'] = merged['수익률(%)'].fillna(0)
+            # 수학적 오류(0으로 나누기) 방지
+            merged['수익률(%)'] = 0.0
+            mask = merged['총자산_원금'] > 0
+            merged.loc[mask, '수익률(%)'] = ((merged.loc[mask, '총자산_평가'] - merged.loc[mask, '총자산_원금']) / merged.loc[mask, '총자산_원금']) * 100
             
             fig_trend = px.area(merged, x='날짜', y='총자산_평가', title="날짜별 금융자산 합산 우상향 지표", color_discrete_sequence=['#CD2E3A'])
             fig_trend.update_traces(
